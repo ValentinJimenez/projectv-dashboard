@@ -60,7 +60,8 @@ const pending = proposals.filter(p => p.status === "pending");
       {/* Topbar */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, paddingBottom: 14, borderBottom: "1px solid #1a1a2e" }}>
         <div style={{ fontSize: 15, fontWeight: 800, letterSpacing: 3, textTransform: "uppercase", color: "#fff" }}>
-          Project<span style={{ color: "#7c6aff" }}>V</span> — Agent HQ
+          Project<span style={{ color: "#7c6aff" }}>S</span>now — Agent HQ
+
         </div>
         <div style={{ display: "flex", gap: 20 }}>
           {[["3", "Live listings"], ["442", "Views"], ["7", "Sales"]].map(([v, l]) => (
@@ -84,7 +85,8 @@ const pending = proposals.filter(p => p.status === "pending");
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 10, letterSpacing: 2, textTransform: "uppercase", color: "#7c6aff", marginBottom: 3 }}>Orchestrator</div>
-              <div style={{ fontSize: 15, fontWeight: 800, color: "#fff", marginBottom: 2 }}>Director Agent</div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: "#fff", marginBottom: 2 }}>Snow</div>
+
               <div style={{ fontSize: 11, color: "#555", fontFamily: "monospace" }}>Claude Opus 4.6</div>
             </div>
             <div style={{ fontSize: 12, color: "#888", textAlign: "right", lineHeight: 1.5 }}>Overseeing 4 agents<br />Next review in 6h</div>
