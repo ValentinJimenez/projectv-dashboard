@@ -17,7 +17,7 @@ const ACTIVITY = [
 ];
 
 export default function Dashboard() {
-  const { proposals, loading, decide } = useProposals();
+  const { proposals, decide } = useProposals();
 const pending = proposals.filter(p => p.status === "pending");
 
   const getDeskStyle = (status) => {
