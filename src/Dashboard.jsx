@@ -13,6 +13,7 @@ export default function Dashboard() {
   const { designs, decideDesign } = useDesigns();
   const [keywords, setKeywords] = useState("");
   const [launching, setLaunching] = useState(false);
+  const [selectedDesign, setSelectedDesign] = useState(null);
 
   const pending = proposals.filter(p => p.status === "pending");
 
@@ -159,6 +160,7 @@ export default function Dashboard() {
                   <div style={{ display: "flex", gap: 5 }}>
                     <button onClick={() => decideDesign(d.id, "design_approved")} style={{ flex: 1, fontSize: 10, padding: "4px", borderRadius: 5, cursor: "pointer", fontWeight: 700, background: "#22c55e22", color: "#22c55e", border: "1px solid #22c55e33" }}>✓ Approve</button>
                     <button onClick={() => decideDesign(d.id, "design_rejected")} style={{ flex: 1, fontSize: 10, padding: "4px", borderRadius: 5, cursor: "pointer", fontWeight: 700, background: "#ef444422", color: "#ef4444", border: "1px solid #ef444433" }}>✗ Redo</button>
+                    <button onClick={() => setSelectedDesign(d)} style={{ fontSize: 10, padding: "4px 8px", borderRadius: 5, cursor: "pointer", background: "#1a1a2e", color: "#888", border: "1px solid #222" }}>⛶ View</button>
                   </div>
                 </div>
               </div>
@@ -216,6 +218,21 @@ export default function Dashboard() {
         </div>
 
       </div>
+      {selectedDesign && (
+  <div onClick={() => setSelectedDesign(null)} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, cursor: "pointer" }}>
+    <div onClick={e => e.stopPropagation()} style={{ background: "#0d0d1a", border: "1px solid #2a2a3e", borderRadius: 16, overflow: "hidden", maxWidth: 600, width: "90%", cursor: "default" }}>
+      <img src={selectedDesign.image_url} alt={selectedDesign.title} style={{ width: "100%", maxHeight: 500, objectFit: "contain", background: "#060610" }} />
+      <div style={{ padding: "16px 20px", borderTop: "1px solid #111" }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: "#fff", marginBottom: 12 }}>{selectedDesign.title}</div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => { decideDesign(selectedDesign.id, "design_approved"); setSelectedDesign(null); }} style={{ flex: 1, padding: "8px", borderRadius: 8, cursor: "pointer", fontWeight: 700, fontSize: 12, background: "#22c55e22", color: "#22c55e", border: "1px solid #22c55e44" }}>✓ Approve</button>
+          <button onClick={() => { decideDesign(selectedDesign.id, "design_rejected"); setSelectedDesign(null); }} style={{ flex: 1, padding: "8px", borderRadius: 8, cursor: "pointer", fontWeight: 700, fontSize: 12, background: "#ef444422", color: "#ef4444", border: "1px solid #ef444433" }}>✗ Redo</button>
+          <button onClick={() => setSelectedDesign(null)} style={{ padding: "8px 16px", borderRadius: 8, cursor: "pointer", fontSize: 12, background: "#1a1a2e", color: "#666", border: "1px solid #222" }}>Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
     </div>
   );
 }
