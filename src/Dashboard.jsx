@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useProposals } from "./useAirtable";
 
 const AGENTS = [
   { id: 1, name: "Research Agent", icon: "🔍", model: "haiku-4.5", color: "#1a1530", status: "running", task: "Scanning Etsy trends...", detail: "3 proposals queued" },
@@ -23,13 +23,8 @@ const MOCK_PROPOSALS = [
 ];
 
 export default function Dashboard() {
-  const [proposals, setProposals] = useState(MOCK_PROPOSALS);
-
-  const decide = (id, decision) => {
-    setProposals(p => p.map(pr => pr.id === id ? { ...pr, status: decision } : pr));
-  };
-
-  const pending = proposals.filter(p => p.status === "pending");
+  const { proposals, loading, decide } = useProposals();
+const pending = proposals.filter(p => p.status === "pending");
 
   const getDeskStyle = (status) => {
     const base = {
