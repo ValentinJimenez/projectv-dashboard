@@ -1,4 +1,4 @@
-import { useProposals } from "./useAirtable";
+import { useProposals, useDesigns } from "./useAirtable";
 
 const AGENTS = [
   { id: 1, name: "Research Agent", icon: "🔍", model: "haiku-4.5", color: "#1a1530", status: "running", task: "Scanning Etsy trends...", detail: "3 proposals queued" },
@@ -18,15 +18,12 @@ const ACTIVITY = [
 
 export default function Dashboard() {
   const { proposals, decide } = useProposals();
-const pending = proposals.filter(p => p.status === "pending");
+  const { designs, decideDesign } = useDesigns();
+
+  const pending = proposals.filter(p => p.status === "pending");
 
   const getDeskStyle = (status) => {
-    const base = {
-      background: "#0d0d1a",
-      border: "1px solid #1a1a2e",
-      borderRadius: 10,
-      padding: 13,
-    };
+    const base = { background: "#0d0d1a", border: "1px solid #1a1a2e", borderRadius: 10, padding: 13 };
     if (status === "running") return { ...base, borderColor: "#22c55e33" };
     if (status === "waiting") return { ...base, borderColor: "#f59e0b33" };
     if (status === "soon") return { ...base, border: "1px dashed #1a1a2e", opacity: 0.5 };
@@ -61,10 +58,9 @@ const pending = proposals.filter(p => p.status === "pending");
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, paddingBottom: 14, borderBottom: "1px solid #1a1a2e" }}>
         <div style={{ fontSize: 15, fontWeight: 800, letterSpacing: 3, textTransform: "uppercase", color: "#fff" }}>
           Project<span style={{ color: "#7c6aff" }}>S</span>now — Agent HQ
-
         </div>
         <div style={{ display: "flex", gap: 20 }}>
-          {[["3", "Live listings"], ["442", "Views"], ["7", "Sales"]].map(([v, l]) => (
+          {[["0", "Live listings"], ["0", "Views"], ["0", "Sales"]].map(([v, l]) => (
             <div key={l} style={{ textAlign: "right" }}>
               <div style={{ fontSize: 18, fontWeight: 700, color: "#fff", fontFamily: "monospace" }}>{v}</div>
               <div style={{ fontSize: 9, letterSpacing: 1.5, textTransform: "uppercase", color: "#444" }}>{l}</div>
@@ -86,7 +82,6 @@ const pending = proposals.filter(p => p.status === "pending");
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 10, letterSpacing: 2, textTransform: "uppercase", color: "#7c6aff", marginBottom: 3 }}>Orchestrator</div>
               <div style={{ fontSize: 15, fontWeight: 800, color: "#fff", marginBottom: 2 }}>Snow</div>
-
               <div style={{ fontSize: 11, color: "#555", fontFamily: "monospace" }}>Claude Opus 4.6</div>
             </div>
             <div style={{ fontSize: 12, color: "#888", textAlign: "right", lineHeight: 1.5 }}>Overseeing 4 agents<br />Next review in 6h</div>
@@ -121,6 +116,38 @@ const pending = proposals.filter(p => p.status === "pending");
               </div>
             ))}
           </div>
+
+          {/* Design Review */}
+          {designs.length > 0 && (
+            <div>
+              <div style={{ fontSize: 9, letterSpacing: 2, textTransform: "uppercase", color: "#555", marginBottom: 10 }}>
+                Design Review — {designs.length} en attente
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
+                {designs.map(d => (
+                  <div key={d.id} style={{ background: "#0d0d1a", border: "1px solid #1a1a2e", borderRadius: 10, overflow: "hidden" }}>
+                    {d.image_url && (
+                      <img src={d.image_url} alt={d.title} style={{ width: "100%", height: 160, objectFit: "cover" }} />
+                    )}
+                    <div style={{ padding: 12 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#ccc", marginBottom: 8 }}>{d.title}</div>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button onClick={() => decideDesign(d.id, "design_approved")}
+                          style={{ flex: 1, fontSize: 10, padding: "5px", borderRadius: 5, cursor: "pointer", fontWeight: 700, background: "#22c55e22", color: "#22c55e", border: "1px solid #22c55e44" }}>
+                          ✓ Approve
+                        </button>
+                        <button onClick={() => decideDesign(d.id, "design_rejected")}
+                          style={{ flex: 1, fontSize: 10, padding: "5px", borderRadius: 5, cursor: "pointer", fontWeight: 700, background: "#ef444422", color: "#ef4444", border: "1px solid #ef444444" }}>
+                          ✗ Refaire
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
         </div>
 
         {/* Sidebar */}
