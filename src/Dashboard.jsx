@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useProposals, useDesigns } from "./useAirtable";
+import { useProposals, useDesigns, useReadyListings } from "./useAirtable";
 
 const ACTIVITY = [
   { icon: "🔍", text: "3 proposals sent to Airtable", time: "2m" },
@@ -11,6 +11,7 @@ const ACTIVITY = [
 export default function Dashboard() {
   const { proposals, decide } = useProposals();
   const { designs, decideDesign } = useDesigns();
+  const { listings } = useReadyListings();
   const [keywords, setKeywords] = useState("");
   const [launching, setLaunching] = useState(false);
   const [selectedDesign, setSelectedDesign] = useState(null);
@@ -174,20 +175,46 @@ export default function Dashboard() {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
 
         {/* Listing Agent */}
-        <div style={{ background: "#0d0d1a", border: "1px solid #1a1a2e", borderRadius: 12, padding: "14px 16px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-            <div style={{ width: 32, height: 32, borderRadius: 8, background: "#1a1515", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>📤</div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: "#e2e2f0" }}>Listing Agent</div>
-              <div style={{ fontSize: 10, color: "#444", fontFamily: "monospace" }}>haiku-4.5</div>
-            </div>
-            <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: "#1a1a2e", color: "#555", border: "1px solid #222" }}>Idle</span>
+        <div style={{ background: "#0d0d1a", border: "1px solid #1a1a2e", borderRadius: 12, overflow: "hidden" }}>
+  <div style={{ padding: "14px 16px", borderBottom: "1px solid #111", display: "flex", alignItems: "center", gap: 12 }}>
+    <div style={{ width: 32, height: 32, borderRadius: 8, background: "#1a1515", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>📤</div>
+    <div style={{ flex: 1 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: "#e2e2f0" }}>Listing Agent</div>
+      <div style={{ fontSize: 10, color: "#444", fontFamily: "monospace" }}>haiku-4.5</div>
+    </div>
+    <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 20, background: "#1a1a2e", color: "#555", border: "1px solid #222" }}>Idle</span>
+  </div>
+
+  <div style={{ padding: "10px 16px", background: "#060610", borderBottom: "1px solid #111", fontFamily: "monospace", fontSize: 10, color: "#555", lineHeight: 1.8 }}>
+    → Writes SEO titles + tags<br />
+    <span style={{ color: "#333" }}>{listings.length} listing(s) ready to upload</span>
+  </div>
+
+  <div style={{ padding: 12 }}>
+    <div style={{ fontSize: 9, letterSpacing: 1.5, textTransform: "uppercase", color: "#444", marginBottom: 8, display: "flex", justifyContent: "space-between" }}>
+      <span>Ready to upload</span>
+      {listings.length > 0 && <span style={{ background: "#7c6aff", color: "#fff", fontSize: 9, borderRadius: 20, padding: "1px 7px" }}>{listings.length}</span>}
+    </div>
+    {listings.length === 0 && (
+      <div style={{ fontSize: 11, color: "#333", textAlign: "center", padding: "12px 0" }}>No listings ready yet</div>
+    )}
+    {listings.map(l => (
+      <div key={l.id} style={{ background: "#060610", border: "1px solid #7c6aff22", borderRadius: 8, overflow: "hidden", marginBottom: 8 }}>
+        {l.image_url && <img src={l.image_url} alt={l.title} style={{ width: "100%", height: 100, objectFit: "cover" }} />}
+        <div style={{ padding: "10px 12px" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#ccc", marginBottom: 4, lineHeight: 1.4 }}>{l.title}</div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <span style={{ fontSize: 10, color: "#7c6aff", fontFamily: "monospace", fontWeight: 700 }}>{l.price}</span>
+            <span style={{ fontSize: 9, color: "#444", fontFamily: "monospace" }}>{l.tags?.split(",").length || 0} tags</span>
           </div>
-          <div style={{ background: "#060610", borderRadius: 6, padding: 8, fontFamily: "monospace", fontSize: 10, color: "#555", lineHeight: 1.8 }}>
-            → Writes SEO titles + tags<br />
-            <span style={{ color: "#333" }}>Awaiting approved designs</span>
-          </div>
+          <button style={{ width: "100%", fontSize: 10, padding: "5px", borderRadius: 5, cursor: "pointer", fontWeight: 700, background: "#7c6aff22", color: "#7c6aff", border: "1px solid #7c6aff44" }}>
+            📤 Upload to Etsy
+          </button>
         </div>
+      </div>
+    ))}
+  </div>
+</div>
 
         {/* Feedback Agent */}
         <div style={{ background: "#0d0d1a", border: "1px solid #1a1a2e", borderRadius: 12, padding: "14px 16px" }}>
