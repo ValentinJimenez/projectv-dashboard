@@ -16,12 +16,6 @@ const ACTIVITY = [
   { icon: "📊", text: "Weekly recap sent", time: "1d" },
 ];
 
-const MOCK_PROPOSALS = [
-  { id: "p1", title: "Minimalist Graduation Wall Art", meta: "seasonal · medium", status: "pending" },
-  { id: "p2", title: "Mental Health SVG Bundle", meta: "evergreen · low", status: "pending" },
-  { id: "p3", title: "Spring Garden Planning Print", meta: "seasonal · medium", status: "pending" },
-];
-
 export default function Dashboard() {
   const { proposals, loading, decide } = useProposals();
 const pending = proposals.filter(p => p.status === "pending");
