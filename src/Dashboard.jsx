@@ -45,12 +45,30 @@ async function deleteByStatus(statuses, onDone) {
 
 // ─── Cat SVGs ──────────────────────────────────────────────
 const LoafCat = ({ color = C.snow, size = 40 }) => (
-  <svg width={size} height={Math.round(size * 0.85)} viewBox="0 0 50 43" fill="none">
-    <ellipse cx="25" cy="30" rx="22" ry="13" fill={color} />
-    <ellipse cx="25" cy="22" rx="14" ry="11" fill={color} />
-    <polygon points="13,14 11,6 18,12" fill={color} />
-    <polygon points="37,14 39,6 32,12" fill={color} />
-    <path d="M18,22 Q22,20 26,22 Q30,20 33,22" stroke={C.bg} strokeWidth="1.6" fill="none" strokeLinecap="round" />
+  <svg width={size} height={size} viewBox="0 0 60 60" fill="none">
+    {/* Ears */}
+    <polygon points="7,22 3,6 19,18" fill={color} />
+    <polygon points="53,22 57,6 41,18" fill={color} />
+    {/* Inner ears */}
+    <polygon points="9,20 6,9 17,17" fill={C.bg} opacity="0.25" />
+    <polygon points="51,20 54,9 43,17" fill={C.bg} opacity="0.25" />
+    {/* Face */}
+    <circle cx="30" cy="34" r="22" fill={color} />
+    {/* Sleepy eyes */}
+    <path d="M18,29 Q22,25 26,29" stroke={C.bg} strokeWidth="2.2" fill="none" strokeLinecap="round" />
+    <path d="M34,29 Q38,25 42,29" stroke={C.bg} strokeWidth="2.2" fill="none" strokeLinecap="round" />
+    {/* Nose */}
+    <polygon points="30,35 27.5,33 32.5,33" fill={C.bg} opacity="0.6" />
+    {/* Mouth */}
+    <path d="M27.5,37 Q30,40 32.5,37" stroke={C.bg} strokeWidth="1.4" fill="none" strokeLinecap="round" opacity="0.5" />
+    {/* Whiskers left */}
+    <line x1="5"  y1="35" x2="22" y2="36" stroke={C.bg} strokeWidth="1.1" opacity="0.35" strokeLinecap="round" />
+    <line x1="5"  y1="39" x2="22" y2="39" stroke={C.bg} strokeWidth="1.1" opacity="0.35" strokeLinecap="round" />
+    <line x1="6"  y1="43" x2="22" y2="42" stroke={C.bg} strokeWidth="1.1" opacity="0.35" strokeLinecap="round" />
+    {/* Whiskers right */}
+    <line x1="55" y1="35" x2="38" y2="36" stroke={C.bg} strokeWidth="1.1" opacity="0.35" strokeLinecap="round" />
+    <line x1="55" y1="39" x2="38" y2="39" stroke={C.bg} strokeWidth="1.1" opacity="0.35" strokeLinecap="round" />
+    <line x1="54" y1="43" x2="38" y2="42" stroke={C.bg} strokeWidth="1.1" opacity="0.35" strokeLinecap="round" />
   </svg>
 );
 const ResearchCat = ({ color = C.accent, size = 36 }) => (
@@ -568,7 +586,10 @@ function RoomsView({ agentsStatus, packages, listings, setActive }) {
 }
 
 // ─── Snow Overview page ─────────────────────────────────────
-function OverviewPage({ setActive, pipelineStatus, packages, listings }) {
+function OverviewPage({ setActive, pipelineStatus, packages, listings, launchProps = {} }) {
+  const { keywords = "", setKeywords, launching, launch, runStep3: lr3, stopPipeline, resetPipeline, fullReset } = launchProps;
+  const isRunning    = pipelineStatus?.running;
+  const pipelineStep = pipelineStatus?.status;
   const { decisions, resolve } = usePendingDecisions();
   const agentsStatus = useAgentsStatus();
   const lastMeeting  = useLastMeeting();
@@ -640,6 +661,38 @@ function OverviewPage({ setActive, pipelineStatus, packages, listings }) {
           <div style={{ ...F, fontSize: 24, fontWeight: 700, color: C.amber }}>
             {snowAgent?.autonomy_level ?? 2}<span style={{ fontSize: 10, color: C.muted }}>/10</span>
           </div>
+        </div>
+      </div>
+
+      {/* Launch Production card */}
+      <div style={{ background: C.card, border: `1px solid ${C.accent}44`, borderRadius: 12,
+        padding: "16px 18px", marginBottom: 18, boxShadow: C.glow }}>
+        <div style={{ ...F, fontSize: 8, color: C.accent, letterSpacing: 2, textTransform: "uppercase", marginBottom: 12 }}>LAUNCH PRODUCTION</div>
+        <input value={keywords} onChange={e => setKeywords?.(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && !isRunning && !launching && launch?.()}
+          placeholder="keywords for Snow (optional)..."
+          style={{ ...F, width: "100%", background: C.bg, border: `1px solid ${C.border}`,
+            borderRadius: 8, padding: "8px 12px", color: C.text, fontSize: 11,
+            outline: "none", caretColor: C.snow, boxSizing: "border-box", marginBottom: 10 }}
+          onFocus={e => e.target.style.borderColor = C.snow}
+          onBlur={e => e.target.style.borderColor = C.border}
+        />
+        <div style={{ marginBottom: 8 }}>
+          {isRunning ? (
+            <RedBtn onClick={stopPipeline} style={{ width: "100%", padding: "9px 0", fontSize: 11, letterSpacing: 1, animation: "pulse 1.4s ease-in-out infinite" }}>[ STOP PIPELINE ]</RedBtn>
+          ) : launching ? (
+            <GhostBtn disabled style={{ width: "100%", padding: "9px 0", fontSize: 11 }}>LAUNCHING...</GhostBtn>
+          ) : pipelineStep === "waiting_review" ? (
+            <AmberBtn onClick={() => setActive("review")} style={{ width: "100%", padding: "9px 0", fontSize: 11, letterSpacing: 1 }}>[ APPROVE PACKAGES ]</AmberBtn>
+          ) : pipelineStep === "waiting_listing" ? (
+            <CyanBtn onClick={lr3} style={{ width: "100%", padding: "9px 0", fontSize: 11, letterSpacing: 1 }}>[ RUN SNOOPY ]</CyanBtn>
+          ) : (
+            <VioletBtn onClick={launch} style={{ width: "100%", padding: "9px 0", fontSize: 11, letterSpacing: 1 }}>[ GO WORK ]</VioletBtn>
+          )}
+        </div>
+        <div style={{ display: "flex", gap: 6 }}>
+          <GhostBtn onClick={resetPipeline} style={{ flex: 1, padding: "5px 0", fontSize: 9, letterSpacing: 1 }}>[ RESET ]</GhostBtn>
+          <RedBtn onClick={fullReset} style={{ flex: 1, padding: "5px 0", fontSize: 9, letterSpacing: 1 }}>[ FULL RESET ]</RedBtn>
         </div>
       </div>
 
@@ -1195,41 +1248,16 @@ export default function Dashboard() {
         {/* Header */}
         <div style={{ height: 46, borderBottom: `1px solid ${C.border}`, display: "flex",
           alignItems: "center", gap: 10, padding: "0 16px", flexShrink: 0, background: C.bg }}>
-          <span style={{ ...F, fontSize: 11, color: C.accent, letterSpacing: 2, minWidth: 180 }}>
+          <span style={{ ...F, fontSize: 11, color: C.accent, letterSpacing: 2 }}>
             {PAGE_TITLES[activePage] || "OVERVIEW"}
           </span>
-          <div style={{ width: 1, height: 16, background: C.border }} />
-          <input value={keywords} onChange={e => setKeywords(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && !isRunning && !launching && launch()}
-            placeholder="keywords for snow..."
-            style={{ ...F, background: C.card, border: `1px solid ${C.border}`, borderRadius: 6,
-              padding: "5px 10px", color: C.text, fontSize: 10, width: 180, outline: "none", caretColor: C.snow }}
-            onFocus={e => e.target.style.borderColor = C.snow}
-            onBlur={e => e.target.style.borderColor = C.border}
-          />
-
-          {isRunning ? (
-            <RedBtn onClick={stopPipeline} style={{ fontSize: 10, animation: "pulse 1.4s ease-in-out infinite" }}>[ STOP ]</RedBtn>
-          ) : launching ? (
-            <GhostBtn disabled style={{ fontSize: 10 }}>LAUNCHING...</GhostBtn>
-          ) : pipelineStep === "waiting_review" ? (
-            <AmberBtn onClick={() => setActivePage("review")} style={{ fontSize: 10 }}>[ APPROVE PACKAGES ]</AmberBtn>
-          ) : pipelineStep === "waiting_listing" ? (
-            <CyanBtn onClick={runStep3} style={{ fontSize: 10 }}>[ RUN SNOOPY ]</CyanBtn>
-          ) : (
-            <VioletBtn onClick={launch} style={{ fontSize: 10 }}>[ GO WORK ]</VioletBtn>
-          )}
-
-          <GhostBtn onClick={resetPipeline} style={{ fontSize: 10 }}>[ RESET ]</GhostBtn>
-          <RedBtn onClick={fullReset} style={{ fontSize: 10 }}>[ FULL RESET ]</RedBtn>
-
           {isRunning && (
             <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+              <div style={{ width: 1, height: 14, background: C.border }} />
               <StatusDot color={C.success} pulse />
               <span style={{ ...F, fontSize: 8, color: C.muted, letterSpacing: 1 }}>{activeAgent}</span>
             </div>
           )}
-
           <div style={{ flex: 1 }} />
           {[["LISTINGS", listings.length], ["VIEWS", 0], ["SALES", 0]].map(([label, val]) => (
             <div key={label} style={{ textAlign: "right", paddingLeft: 14, borderLeft: `1px solid ${C.border}` }}>
@@ -1271,7 +1299,8 @@ export default function Dashboard() {
 
         {/* Page content */}
         <div style={{ flex: 1, overflowY: "auto" }}>
-          {activePage === "overview"  && <OverviewPage setActive={setActivePage} pipelineStatus={ps} packages={packages} listings={listings} />}
+          {activePage === "overview"  && <OverviewPage setActive={setActivePage} pipelineStatus={ps} packages={packages} listings={listings}
+            launchProps={{ keywords, setKeywords, launching, launch, runStep2, runStep3, stopPipeline, resetPipeline, fullReset }} />}
           {activePage === "review"    && <ReviewPage packages={packages} reviewPackage={reviewPackage} activeAgent={activeAgent} runStep2={runStep2} />}
           {activePage === "research"  && <AgentHistoryPage name="LEON"   role="Market Research Specialist" Cat={ResearchCat} accent={C.accent} entries={activityEntries} activeAgent={activeAgent} />}
           {activePage === "design"    && <AgentHistoryPage name="RIKO"   role="Visual Design Specialist"    Cat={DesignCat}   accent={C.accent} entries={activityEntries} activeAgent={activeAgent} />}
