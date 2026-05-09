@@ -1040,6 +1040,105 @@ function ListingModal({ listing, onClose }) {
   );
 }
 
+// ─── Lock screen ─────────────────────────────────────────
+function LockScreen({ onUnlock }) {
+  const [pw, setPw]       = useState("");
+  const [error, setError] = useState(false);
+  const inputRef          = useRef(null);
+
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  const attempt = () => {
+    const correct = process.env.REACT_APP_DASHBOARD_PASSWORD;
+    if (pw === correct) {
+      localStorage.setItem("projectsnow_unlocked", "1");
+      onUnlock();
+    } else {
+      setError(true);
+      setPw("");
+      setTimeout(() => setError(false), 2000);
+    }
+  };
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: C.bg,
+      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+      ...F,
+    }}>
+      {/* Scanlines overlay */}
+      <div style={{
+        position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0,
+        background: "repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,255,136,0.012) 3px, rgba(0,255,136,0.012) 4px)",
+      }} />
+
+      <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 0 }}>
+        {/* Cat */}
+        <div style={{
+          marginBottom: 28,
+          filter: "drop-shadow(0 0 18px #00ff8866)",
+          animation: "floatCat 4s ease-in-out infinite",
+        }}>
+          <LoafCat color={C.active} size={72} />
+        </div>
+
+        {/* Title */}
+        <div style={{ fontSize: 22, fontWeight: 700, color: C.active, letterSpacing: 4, marginBottom: 6 }}>
+          PROJECTSNOW
+        </div>
+        <div style={{ fontSize: 10, color: C.muted, letterSpacing: 3, marginBottom: 40 }}>
+          AGENT OPS v0.1
+        </div>
+
+        {/* Input */}
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <input
+            ref={inputRef}
+            type="password"
+            value={pw}
+            onChange={e => setPw(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && attempt()}
+            placeholder="password"
+            style={{
+              ...F, background: "#050505",
+              border: `1px solid ${error ? C.danger : C.active}`,
+              borderRadius: 4, padding: "8px 14px", color: C.text, fontSize: 12,
+              width: 220, outline: "none", caretColor: C.active, letterSpacing: 2,
+              boxShadow: error ? `0 0 10px ${C.danger}44` : `0 0 10px ${C.active}22`,
+              transition: "border-color 0.2s, box-shadow 0.2s",
+            }}
+          />
+          <button onClick={attempt} style={{
+            ...F, background: "transparent", color: C.active,
+            border: `1px solid ${C.active}`, borderRadius: 4,
+            padding: "8px 18px", fontSize: 11, cursor: "pointer",
+            letterSpacing: 1.5, boxShadow: `0 0 8px ${C.active}33`,
+            transition: "box-shadow 0.15s",
+          }}
+            onMouseEnter={e => e.currentTarget.style.boxShadow = `0 0 16px ${C.active}66`}
+            onMouseLeave={e => e.currentTarget.style.boxShadow = `0 0 8px ${C.active}33`}
+          >[ ENTER ]</button>
+        </div>
+
+        {/* Error */}
+        <div style={{
+          marginTop: 16, ...F, fontSize: 11, letterSpacing: 2,
+          color: C.danger, height: 18,
+          opacity: error ? 1 : 0, transition: "opacity 0.15s",
+          textShadow: `0 0 8px ${C.danger}`,
+        }}>ACCESS DENIED</div>
+      </div>
+
+      <style>{`
+        @keyframes floatCat {
+          0%,100% { transform: translateY(0px); }
+          50%      { transform: translateY(-8px); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 // ─── Page title map ───────────────────────────────────────
 const PAGE_TITLES = {
   overview: "OVERVIEW",
@@ -1054,6 +1153,10 @@ const PAGE_TITLES = {
 
 // ─── Root ─────────────────────────────────────────────────
 export default function Dashboard() {
+  const [unlocked, setUnlocked] = useState(
+    () => !!localStorage.getItem("projectsnow_unlocked")
+  );
+
   const { proposals, decide } = useProposals();
   const { designs, decideDesign } = useDesigns();
   const { listings } = useReadyListings();
@@ -1101,6 +1204,8 @@ export default function Dashboard() {
   const runStep3 = () => callEndpoint("http://localhost:8000/step3");
 
   const noop = () => {};
+
+  if (!unlocked) return <LockScreen onUnlock={() => setUnlocked(true)} />;
 
   return (
     <div style={{ display: "flex", height: "100vh", background: C.bg, color: C.text, overflow: "hidden" }}>
