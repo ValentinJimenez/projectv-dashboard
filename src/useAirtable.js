@@ -93,3 +93,36 @@ export function useDesigns() {
 
   return { designs, decideDesign };
 }
+export function useReadyListings() {
+  const [listings, setListings] = useState([]);
+
+  const fetchListings = async () => {
+    try {
+      const res = await fetch(
+        `https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}?filterByFormula={status}="ready_to_upload"`,
+        { headers: { Authorization: `Bearer ${API_KEY}` } }
+      );
+      const data = await res.json();
+      const mapped = data.records.map(r => ({
+        id: r.id,
+        title: r.fields.title,
+        image_url: r.fields.image_url,
+        price: r.fields.price,
+        tags: r.fields.tags,
+        description: r.fields.description,
+        status: r.fields.status,
+      }));
+      setListings(mapped);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  useEffect(() => {
+    fetchListings();
+    const interval = setInterval(fetchListings, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return { listings };
+}
