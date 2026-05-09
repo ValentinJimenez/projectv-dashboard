@@ -1205,7 +1205,7 @@ function ListingPage({ listings, activeAgent, onSelect, entries }) {
     <div>
       <AgentPageHeader CatComp={ListingCat} name="SNOOPY" sub="claude-haiku-4.5 — SEO & Listing Copywriter" state={state}
         rightSlot={
-          <GhostBtn onClick={() => deleteByStatus(["ready_to_upload"], refresh)} style={{ fontSize: 10, letterSpacing: 1 }}>
+          <GhostBtn onClick={() => deleteByStatus(["ready_to_upload"])} style={{ fontSize: 10, letterSpacing: 1 }}>
             [ CLEAR UPLOADED ]
           </GhostBtn>
         }
