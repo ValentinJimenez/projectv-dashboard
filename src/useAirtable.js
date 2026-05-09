@@ -22,6 +22,47 @@ async function airtablePatch(tableId, id, fields) {
   });
 }
 
+export function usePackages() {
+  const [packages, setPackages] = useState([]);
+
+  const fetch_ = async () => {
+    try {
+      const data = await airtableFetch(
+        `https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}?filterByFormula={status}="pending_review"&sort[0][field]=created_at&sort[0][direction]=asc`
+      );
+      setPackages((data.records || []).map(r => ({
+        id:           r.id,
+        title:        r.fields.title        || "",
+        niche:        r.fields.niche        || "",
+        keyword:      r.fields.keyword      || "",
+        why_it_sells: r.fields.why_it_sells || "",
+        image_url:    r.fields.image_url    || "",
+        image_prompt: r.fields.image_prompt || "",
+        status:       r.fields.status,
+      })));
+    } catch (e) {}
+  };
+
+  const review = async (id, status, context = {}) => {
+    try {
+      await fetch(`http://localhost:8000/packages/${id}/review`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ status, ...context }),
+      });
+    } catch (_) {}
+    fetch_();
+  };
+
+  useEffect(() => {
+    fetch_();
+    const t = setInterval(fetch_, 10000);
+    return () => clearInterval(t);
+  }, []);
+
+  return { packages, review, refresh: fetch_ };
+}
+
 export function useProposals() {
   const [proposals, setProposals] = useState([]);
 
@@ -108,12 +149,13 @@ export function useReadyListings() {
       `https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}?filterByFormula={status}="ready_to_upload"`
     );
     setListings((data.records || []).map(r => ({
-      id: r.id,
-      title: r.fields.title,
-      image_url: r.fields.image_url,
-      price: r.fields.price,
-      tags: r.fields.tags,
-      description: r.fields.description,
+      id:          r.id,
+      title:       r.fields.title       || "",
+      niche:       r.fields.niche       || "",
+      image_url:   r.fields.image_url   || "",
+      price:       r.fields.price       || "",
+      tags:        r.fields.tags        || "",
+      description: r.fields.description || "",
     })));
   };
 

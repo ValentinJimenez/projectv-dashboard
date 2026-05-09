@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
-  useProposals, useDesigns, useReadyListings,
+  usePackages, useReadyListings,
   usePipelineStatus, usePipelineLogs, useSnowMemory, useSnowChat
 } from "./useAirtable";
 
@@ -96,6 +96,18 @@ const ListingCat = ({ color = "#00aa55", size = 36 }) => (
     <path d="M30,36 Q38,28 35,42 Q30,46 21,44" stroke={color} strokeWidth="3" fill="none" strokeLinecap="round" />
   </svg>
 );
+const ReviewCat = ({ color = "#00aa55", size = 36 }) => (
+  <svg width={size} height={size} viewBox="0 0 44 48" fill="none">
+    <ellipse cx="22" cy="36" rx="14" ry="10" fill={color} />
+    <ellipse cx="22" cy="20" rx="13" ry="13" fill={color} />
+    <polygon points="11,10 9,2 16,9" fill={color} />
+    <polygon points="33,10 35,2 28,9" fill={color} />
+    <ellipse cx="22" cy="20" rx="7" ry="4.5" fill={C.bg} />
+    <ellipse cx="22" cy="20" rx="3.5" ry="3.5" fill={color} />
+    <ellipse cx="22" cy="20" rx="1.5" ry="1.5" fill={C.bg} />
+  </svg>
+);
+
 const FeedbackCat = ({ color = "#00aa55", size = 36 }) => (
   <svg width={size} height={size} viewBox="0 0 42 48" fill="none">
     <ellipse cx="21" cy="36" rx="14" ry="11" fill={color} />
@@ -186,6 +198,7 @@ const CategoryBadge = ({ category }) => {
 // ─── Sidebar ───────────────────────────────────────────────
 const NAV = [
   { id: "overview",  label: "SNOW",     sub: "Agent manager",        Cat: LoafCat },
+  { id: "review",    label: "REVIEW",   sub: "Leon + Riko packages", Cat: ReviewCat },
   { id: "research",  label: "LEON",     sub: "Research specialist",  Cat: ResearchCat },
   { id: "design",    label: "RIKO",     sub: "Visual design",        Cat: DesignCat },
   { id: "strategy",  label: "STRATEGY", sub: "Coming soon",          Cat: ListingCat, disabled: true },
@@ -657,7 +670,7 @@ function AgentMiniCard({ agent, onClick }) {
 }
 
 // ─── Overview page (Snow's command center) ─────────────────
-function OverviewPage({ setActive }) {
+function OverviewPage({ setActive, pipelineStatus }) {
   const { decisions, resolve } = usePendingDecisions();
   const agentsStatus           = useAgentsStatus();
   const lastMeeting            = useLastMeeting();
@@ -711,7 +724,21 @@ function OverviewPage({ setActive }) {
               claude-opus-4.6
             </span>
           </div>
-          {/* Agent status row */}
+          {/* SNOW IS WATCHING */}
+          <div style={{ marginTop: 8 }}>
+            {pipelineStatus?.running ? (
+              <div style={{ ...F, fontSize: 10, color: C.active, letterSpacing: 1.5,
+                animation: "pulse 1.4s ease-in-out infinite" }}>
+                ❄️ SNOW IS WATCHING {(pipelineStatus.active_agent || "").toUpperCase()} — {pipelineStatus.current_task || "processing..."}
+              </div>
+            ) : (
+              <div style={{ ...F, fontSize: 10, color: C.muted, letterSpacing: 1.5 }}>
+                ❄️ ALL AGENTS IDLE — AWAITING YOUR SIGNAL
+              </div>
+            )}
+          </div>
+
+        {/* Agent status row */}
           <div style={{ display: "flex", gap: 16, marginTop: 10 }}>
             {subAgents.map(a => {
               let dotColor = "#334433";
@@ -841,6 +868,166 @@ function AgentLog({ agentName, entries, isActive }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Review page — Leon + Riko packages ───────────────────
+function ReviewPage({ packages, reviewPackage, activeAgent, runStep2, entries }) {
+  const [expanded, setExpanded] = useState(null);
+  const [sessionReviewed, setSessionReviewed] = useState(0);
+  const isActive = activeAgent === "Leon" || activeAgent === "Riko";
+
+  const handleReview = async (pkg, status) => {
+    await reviewPackage(pkg.id, status, {
+      title:   pkg.title,
+      niche:   pkg.niche,
+      keyword: pkg.keyword,
+    });
+    setSessionReviewed(n => n + 1);
+  };
+
+  return (
+    <div>
+      <AgentPageHeader CatComp={ReviewCat} name="REVIEW" sub="Human approval — Leon + Riko packages" state={isActive ? "running" : packages.length > 0 ? "waiting" : "idle"} />
+      <TermLine text={`${packages.length} package${packages.length !== 1 ? "s" : ""} awaiting your decision`}
+        color={packages.length > 0 ? C.amber : C.muted} />
+      <div style={{ padding: "20px 26px" }}>
+        {packages.length === 0 ? (
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, padding: "36px 24px", textAlign: "center" }}>
+            {sessionReviewed > 0 ? (
+              <>
+                <div style={{ ...F, fontSize: 12, color: C.active, letterSpacing: 2, marginBottom: 12 }}>
+                  ALL PACKAGES REVIEWED
+                </div>
+                <div style={{ ...F, fontSize: 10, color: C.muted, marginBottom: 20, letterSpacing: 1 }}>
+                  {sessionReviewed} package{sessionReviewed !== 1 ? "s" : ""} decided — approved packages are being sent to strategy review.
+                </div>
+                <GreenBtn onClick={runStep2} style={{ fontSize: 11, letterSpacing: 1 }}>
+                  [ RUN STRATEGY REVIEW ]
+                </GreenBtn>
+              </>
+            ) : (
+              <EmptyState text="NO PACKAGES READY — RUN THE PIPELINE FIRST" />
+            )}
+          </div>
+        ) : (
+          <>
+            <Label>PACKAGES AWAITING REVIEW ({packages.length})</Label>
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              {packages.map(pkg => (
+                <div key={pkg.id} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, overflow: "hidden" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 0 }}>
+                    {/* Image */}
+                    <div style={{ position: "relative", background: "#050505", minHeight: 280 }}>
+                      {pkg.image_url ? (
+                        <>
+                          <img src={pkg.image_url} alt={pkg.title}
+                            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", cursor: "pointer" }}
+                            onClick={() => setExpanded(expanded === pkg.id ? null : pkg.id)} />
+                          <button onClick={() => setExpanded(expanded === pkg.id ? null : pkg.id)} style={{
+                            position: "absolute", top: 6, right: 6, ...F, fontSize: 9, color: C.text,
+                            background: "rgba(0,0,0,0.75)", border: `1px solid ${C.border}`, borderRadius: 3,
+                            padding: "3px 8px", cursor: "pointer", letterSpacing: 1 }}>[ EXPAND ]</button>
+                        </>
+                      ) : (
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}>
+                          <span style={{ ...F, fontSize: 9, color: C.muted }}>NO IMAGE</span>
+                        </div>
+                      )}
+                    </div>
+                    {/* Info */}
+                    <div style={{ padding: "18px 20px", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+                      <div>
+                        <div style={{ ...F, fontSize: 14, color: C.text, fontWeight: 700, marginBottom: 10, lineHeight: 1.4 }}>{pkg.title}</div>
+                        <div style={{ display: "grid", gridTemplateColumns: "80px 1fr", gap: "6px 12px", marginBottom: 14 }}>
+                          <span style={{ ...F, fontSize: 9, color: C.muted, letterSpacing: 1 }}>NICHE</span>
+                          <span style={{ ...F, fontSize: 10, color: C.text }}>{pkg.niche}</span>
+                          <span style={{ ...F, fontSize: 9, color: C.muted, letterSpacing: 1 }}>KEYWORD</span>
+                          <span style={{ ...F, fontSize: 10, color: C.active }}>{pkg.keyword}</span>
+                          <span style={{ ...F, fontSize: 9, color: C.muted, letterSpacing: 1 }}>WHY</span>
+                          <span style={{ ...F, fontSize: 10, color: C.muted, lineHeight: 1.6 }}>{pkg.why_it_sells}</span>
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <GreenBtn onClick={() => handleReview(pkg, "strategy_review")}
+                          style={{ flex: 1, padding: "8px 0", fontSize: 11, letterSpacing: 1 }}>
+                          [ APPROVE ]
+                        </GreenBtn>
+                        <RedBtn onClick={() => handleReview(pkg, "rejected")}
+                          style={{ flex: 1, padding: "8px 0", fontSize: 11, letterSpacing: 1 }}>
+                          [ REJECT ]
+                        </RedBtn>
+                      </div>
+                    </div>
+                  </div>
+                  {/* Fullscreen expand */}
+                  {expanded === pkg.id && pkg.image_url && (
+                    <div onClick={() => setExpanded(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.96)",
+                      display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, cursor: "pointer" }}>
+                      <img src={pkg.image_url} alt={pkg.title}
+                        style={{ maxHeight: "90vh", maxWidth: "70vw", objectFit: "contain" }} />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+      <AgentLog agentName="Leon" entries={entries} isActive={isActive} />
+    </div>
+  );
+}
+
+// ─── Agent history page (Leon / Riko) ─────────────────────
+function AgentHistoryPage({ name, role, Cat, entries, activeAgent }) {
+  const agentsStatus = useAgentsStatus();
+  const agent        = agentsStatus.find(a => a.name === name);
+  const isActive     = activeAgent === name;
+  const state        = isActive ? "running" : "idle";
+
+  return (
+    <div>
+      <AgentPageHeader CatComp={Cat} name={name} sub={role} state={state} />
+      <TermLine text={isActive ? `${name} is currently running` : "Idle — metrics from last run"}
+        color={isActive ? C.active : C.muted} />
+      <div style={{ padding: "20px 26px" }}>
+        {agent ? (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 18 }}>
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, padding: "16px" }}>
+              <div style={{ ...F, fontSize: 9, color: C.muted, letterSpacing: 1.5, marginBottom: 6 }}>TOTAL RUNS</div>
+              <div style={{ ...F, fontSize: 28, fontWeight: 700, color: C.text }}>{agent.run_count || 0}</div>
+            </div>
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, padding: "16px" }}>
+              <div style={{ ...F, fontSize: 9, color: C.muted, letterSpacing: 1.5, marginBottom: 6 }}>AUTONOMY</div>
+              <div style={{ ...F, fontSize: 28, fontWeight: 700, color: C.amber }}>
+                {agent.autonomy_level || 0}<span style={{ fontSize: 12, color: C.muted }}>/10</span>
+              </div>
+            </div>
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, padding: "16px" }}>
+              <div style={{ ...F, fontSize: 9, color: C.muted, letterSpacing: 1.5, marginBottom: 6 }}>LAST RUN</div>
+              <div style={{ ...F, fontSize: 14, color: C.text }}>
+                {agent.last_run?.run_date ? String(agent.last_run.run_date).slice(0, 10) : "never"}
+              </div>
+            </div>
+            {Object.entries(agent.metrics || {}).map(([k, v]) => (
+              <div key={k} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, padding: "16px" }}>
+                <div style={{ ...F, fontSize: 9, color: C.muted, letterSpacing: 1.5, marginBottom: 6 }}>{k.toUpperCase()}</div>
+                <div style={{ ...F, fontSize: 24, fontWeight: 700, color: C.text }}>
+                  {v != null ? (v < 1.5 ? (v * 100).toFixed(0) + "%" : v.toFixed(1)) : "—"}
+                  <span style={{ fontSize: 12, marginLeft: 6, color: { up: C.active, down: C.danger, stable: C.muted }[agent.trends?.[k]] || C.muted }}>
+                    {{ up: "↑", down: "↓", stable: "→" }[agent.trends?.[k]] || "→"}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyState text={`NO DATA YET FOR ${name} — RUN THE PIPELINE`} />
+        )}
+      </div>
+      <AgentLog agentName={name} entries={entries} isActive={isActive} />
     </div>
   );
 }
@@ -1012,7 +1199,7 @@ function DesignPage({ designs, decideDesign, activeAgent, onSelect, refresh, ent
 }
 
 // ─── Listing / Snoopy page ─────────────────────────────────
-function ListingPage({ listings, activeAgent, onSelect, refresh, entries }) {
+function ListingPage({ listings, activeAgent, onSelect, entries }) {
   const state = activeAgent === "Snoopy" ? "running" : listings.length > 0 ? "waiting" : "idle";
   return (
     <div>
@@ -1292,6 +1479,7 @@ function LockScreen({ onUnlock }) {
 // ─── Page titles ───────────────────────────────────────────
 const PAGE_TITLES = {
   overview: "SNOW — AGENT MANAGER",
+  review:   "REVIEW — LEON + RIKO PACKAGES",
   research: "LEON — RESEARCH",
   design:   "RIKO — DESIGN",
   strategy: "STRATEGY",
@@ -1307,17 +1495,15 @@ export default function Dashboard() {
     () => !!localStorage.getItem("projectsnow_unlocked")
   );
 
-  const { proposals, decide } = useProposals();
-  const { designs, decideDesign } = useDesigns();
+  const { packages, review: reviewPackage, refresh: refreshPackages } = usePackages();
   const { listings } = useReadyListings();
   const { status: pipelineStatus } = usePipelineStatus();
   const { logs } = usePipelineLogs();
   const { memory } = useSnowMemory();
 
-  const [activePage, setActivePage] = useState("overview");
-  const [keywords, setKeywords]     = useState("");
-  const [launching, setLaunching]   = useState(false);
-  const [selectedDesign, setSelectedDesign]   = useState(null);
+  const [activePage, setActivePage]         = useState("overview");
+  const [keywords, setKeywords]             = useState("");
+  const [launching, setLaunching]           = useState(false);
   const [selectedListing, setSelectedListing] = useState(null);
 
   const activeAgent = pipelineStatus?.active_agent;
@@ -1343,9 +1529,8 @@ export default function Dashboard() {
   if (isRunning) agentStates.overview = "running";
 
   const counts = {
-    research: proposals.filter(p => p.status === "pending").length,
-    design:   designs.length,
-    listing:  listings.length,
+    review:  packages.length,
+    listing: listings.length,
   };
 
   const callEndpoint = async (url) => {
@@ -1394,11 +1579,11 @@ export default function Dashboard() {
             </RedBtn>
           ) : launching ? (
             <GhostBtn disabled style={{ fontSize: 11, letterSpacing: 1, color: C.muted }}>LAUNCHING...</GhostBtn>
-          ) : pipelineStep === "waiting_approval" ? (
-            <button onClick={runStep2} style={{ ...F, fontSize: 11, letterSpacing: 1, cursor: "pointer",
-              background: "transparent", color: C.amber, border: `1px solid ${C.amber}88`,
-              borderRadius: 4, padding: "5px 14px" }}>[ RUN RIKO ]</button>
           ) : pipelineStep === "waiting_review" ? (
+            <button onClick={() => setActivePage("review")} style={{ ...F, fontSize: 11, letterSpacing: 1, cursor: "pointer",
+              background: "transparent", color: C.amber, border: `1px solid ${C.amber}88`,
+              borderRadius: 4, padding: "5px 14px" }}>[ APPROVE PACKAGES ]</button>
+          ) : pipelineStep === "waiting_listing" ? (
             <button onClick={runStep3} style={{ ...F, fontSize: 11, letterSpacing: 1, cursor: "pointer",
               background: "transparent", color: C.cyan, border: `1px solid ${C.cyan}88`,
               borderRadius: 4, padding: "5px 14px" }}>[ RUN SNOOPY ]</button>
@@ -1423,21 +1608,22 @@ export default function Dashboard() {
         </div>
 
         {/* Status banners */}
-        {!isRunning && pipelineStep === "waiting_approval" && (
+        {!isRunning && pipelineStep === "waiting_review" && (
           <div style={{ padding: "7px 20px", background: "#1a1200", borderBottom: `1px solid ${C.amber}44`,
-            display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+            display: "flex", alignItems: "center", gap: 8, flexShrink: 0, cursor: "pointer" }}
+            onClick={() => setActivePage("review")}>
             <StatusDot state="waiting" />
             <span style={{ ...F, fontSize: 10, color: C.amber, letterSpacing: 1.5 }}>
-              WAITING — {proposals.filter(p => p.status === "pending").length} PROPOSALS NEED YOUR APPROVAL — GO TO LEON
+              {packages.length} PACKAGE{packages.length !== 1 ? "S" : ""} WAITING FOR YOUR REVIEW — CLICK TO REVIEW
             </span>
           </div>
         )}
-        {!isRunning && pipelineStep === "waiting_review" && (
+        {!isRunning && pipelineStep === "waiting_listing" && (
           <div style={{ padding: "7px 20px", background: "#001a1f", borderBottom: `1px solid ${C.cyan}44`,
             display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
             <StatusDot state="running" />
             <span style={{ ...F, fontSize: 10, color: C.cyan, letterSpacing: 1.5 }}>
-              WAITING — {designs.length} DESIGNS NEED YOUR REVIEW — GO TO RIKO
+              PACKAGES APPROVED — CLICK [ RUN SNOOPY ] TO WRITE LISTINGS
             </span>
           </div>
         )}
@@ -1446,18 +1632,19 @@ export default function Dashboard() {
             display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
             <StatusDot state="running" />
             <span style={{ ...F, fontSize: 10, color: C.active, letterSpacing: 1.5 }}>
-              STEP 3 COMPLETE — CHECK SNOOPY'S LISTINGS
+              PIPELINE COMPLETE — CHECK SNOOPY'S LISTINGS
             </span>
           </div>
         )}
 
         {/* Page content */}
         <div style={{ flex: 1, overflowY: "auto" }}>
-          {activePage === "overview"  && <OverviewPage setActive={setActivePage} />}
-          {activePage === "research"  && <ResearchPage proposals={proposals} decide={decide} activeAgent={activeAgent} refresh={() => {}} entries={activityEntries} />}
-          {activePage === "design"    && <DesignPage designs={designs} decideDesign={decideDesign} activeAgent={activeAgent} onSelect={setSelectedDesign} refresh={() => {}} entries={activityEntries} />}
+          {activePage === "overview"  && <OverviewPage setActive={setActivePage} pipelineStatus={pipelineStatus} />}
+          {activePage === "review"    && <ReviewPage packages={packages} reviewPackage={reviewPackage} activeAgent={activeAgent} runStep2={runStep2} entries={activityEntries} />}
+          {activePage === "research"  && <AgentHistoryPage name="LEON" role="Market Research Specialist" Cat={ResearchCat} entries={activityEntries} activeAgent={activeAgent} />}
+          {activePage === "design"    && <AgentHistoryPage name="RIKO" role="Visual Design Specialist"    Cat={DesignCat}    entries={activityEntries} activeAgent={activeAgent} />}
           {activePage === "strategy"  && <StrategyPage />}
-          {activePage === "listing"   && <ListingPage listings={listings} activeAgent={activeAgent} onSelect={setSelectedListing} refresh={() => {}} entries={activityEntries} />}
+          {activePage === "listing"   && <ListingPage listings={listings} activeAgent={activeAgent} onSelect={setSelectedListing} entries={activityEntries} />}
           {activePage === "feedback"  && <FeedbackPage entries={activityEntries} />}
           {activePage === "logs"      && <LogsPage logs={logs} />}
           {activePage === "memory"    && <MemoryPage memory={memory} />}
@@ -1470,7 +1657,6 @@ export default function Dashboard() {
         <SnowChat />
       </div>
 
-      {selectedDesign  && <DesignModal  design={selectedDesign}  onClose={() => setSelectedDesign(null)}  decideDesign={decideDesign} />}
       {selectedListing && <ListingModal listing={selectedListing} onClose={() => setSelectedListing(null)} />}
 
       <style>{`
