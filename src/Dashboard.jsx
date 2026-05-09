@@ -431,11 +431,20 @@ function SnowChat() {
   const [sending, setSending] = useState(false);
   const { messages }          = useSnowChat();
   const scrollRef             = useRef(null);
+  const prevCountRef          = useRef(0);
 
+  // Only scroll to bottom when new messages arrive, not on every poll
   useEffect(() => {
-    if (scrollRef.current)
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages, sending]);
+    if (messages.length > prevCountRef.current) {
+      if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+    prevCountRef.current = messages.length;
+  }, [messages]);
+
+  // Also scroll when the thinking indicator appears
+  useEffect(() => {
+    if (sending && scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [sending]);
 
   const send = async () => {
     const msg = input.trim();
@@ -449,16 +458,16 @@ function SnowChat() {
   };
 
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, overflow: "hidden" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: C.bg, overflow: "hidden" }}>
       <div style={{ padding: "10px 14px", borderBottom: `1px solid ${C.border}`,
-        display: "flex", alignItems: "center", gap: 8 }}>
+        display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
         <LoafCat color={C.active} size={20} />
         <span style={{ ...F, fontSize: 11, color: C.active, letterSpacing: 2 }}>DIRECT LINE — SNOW</span>
         <span style={{ ...F, fontSize: 9, color: C.muted, marginLeft: "auto", letterSpacing: 1 }}>
           claude-opus-4.6
         </span>
       </div>
-      <div ref={scrollRef} style={{ height: 320, overflowY: "auto", padding: "14px 14px 8px",
+      <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "14px 14px 8px",
         display: "flex", flexDirection: "column", gap: 12, background: "#060606" }}>
         {messages.length === 0 && !sending && (
           <div style={{ ...F, fontSize: 10, color: "#223322", textAlign: "center",
@@ -793,8 +802,6 @@ function OverviewPage({ setActive }) {
         )}
       </div>
 
-      {/* Direct line chat */}
-      <SnowChat />
     </div>
   );
 }
@@ -895,7 +902,50 @@ function ResearchPage({ proposals, decide, activeAgent, refresh, entries }) {
 
 // ─── Design / Riko page ────────────────────────────────────
 function DesignPage({ designs, decideDesign, activeAgent, onSelect, refresh, entries }) {
-  const state = activeAgent === "Riko" ? "running" : designs.length > 0 ? "waiting" : "idle";
+  const [session, setSession]       = useState({ approved: 0, rejected: 0 });
+  const [allRejected, setAllRejected] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+  const prevLengthRef = useRef(0);
+
+  // Reset session when new designs appear after the list was empty (post-regen)
+  useEffect(() => {
+    if (designs.length > 0 && prevLengthRef.current === 0) {
+      setSession({ approved: 0, rejected: 0 });
+      setAllRejected(false);
+      setRegenerating(false);
+    }
+    prevLengthRef.current = designs.length;
+  }, [designs.length]);
+
+  // Detect all-rejected: list emptied with no approvals this session
+  useEffect(() => {
+    if (session.rejected > 0 && session.approved === 0 && designs.length === 0) {
+      setAllRejected(true);
+    }
+  }, [designs.length, session]);
+
+  // Auto-trigger regen after brief delay so user sees the message
+  useEffect(() => {
+    if (!allRejected || regenerating) return;
+    const t = setTimeout(async () => {
+      setRegenerating(true);
+      setAllRejected(false);
+      try { await fetch(`${API}/step2`, { method: "POST" }); } catch (_) {}
+    }, 1800);
+    return () => clearTimeout(t);
+  }, [allRejected, regenerating]);
+
+  const handleDecide = (id, decision) => {
+    decideDesign(id, decision);
+    setSession(prev => ({
+      approved: prev.approved + (decision === "design_approved" ? 1 : 0),
+      rejected: prev.rejected + (decision === "design_rejected" ? 1 : 0),
+    }));
+  };
+
+  const isRikoRunning = activeAgent === "Riko" || regenerating;
+  const state = isRikoRunning ? "running" : designs.length > 0 ? "waiting" : "idle";
+
   return (
     <div>
       <AgentPageHeader CatComp={DesignCat} name="RIKO" sub="flux-schnell via Replicate — Visual Design Specialist" state={state}
@@ -908,40 +958,51 @@ function DesignPage({ designs, decideDesign, activeAgent, onSelect, refresh, ent
       <TermLine text={`${designs.length} design${designs.length !== 1 ? "s" : ""} awaiting review`}
         color={state === "running" ? C.active : C.muted} />
       <div style={{ padding: "20px 26px" }}>
-        {designs.length === 0
-          ? <EmptyState text="NO DESIGNS READY YET — APPROVE PROPOSALS TO GENERATE" />
-          : (
-            <>
-              <Label>DESIGNS AWAITING REVIEW ({designs.length})</Label>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-                {designs.map(d => (
-                  <div key={d.id} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, overflow: "hidden" }}
-                    onMouseEnter={e => { e.currentTarget.style.borderColor = C.active; e.currentTarget.style.boxShadow = C.glow; }}
-                    onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.boxShadow = "none"; }}>
-                    {d.image_url && (
-                      <div style={{ position: "relative" }}>
-                        <img src={d.image_url} alt={d.title} style={{ width: "100%", height: 170, objectFit: "cover", display: "block" }} />
-                        <button onClick={() => onSelect(d)} style={{
-                          position: "absolute", top: 6, right: 6, ...F, fontSize: 9, color: C.text,
-                          background: "rgba(0,0,0,0.75)", border: `1px solid ${C.border}`, borderRadius: 3,
-                          padding: "3px 8px", cursor: "pointer", letterSpacing: 1 }}>[ EXPAND ]</button>
-                      </div>
-                    )}
-                    <div style={{ padding: "10px 12px" }}>
-                      <div style={{ ...F, fontSize: 10, color: C.text, marginBottom: 8, lineHeight: 1.4 }}>
-                        {d.title?.slice(0, 60)}{d.title?.length > 60 ? "…" : ""}
-                      </div>
-                      <div style={{ display: "flex", gap: 5 }}>
-                        <GreenBtn onClick={() => decideDesign(d.id, "design_approved")} style={{ flex: 1, padding: "5px 0", fontSize: 10 }}>[ OK ]</GreenBtn>
-                        <RedBtn onClick={() => decideDesign(d.id, "design_rejected")} style={{ flex: 1, padding: "5px 0", fontSize: 10 }}>[ REDO ]</RedBtn>
-                      </div>
+        {allRejected || regenerating ? (
+          <div style={{ background: C.card, border: `1px solid ${C.amber}44`, borderRadius: 6,
+            padding: "32px 24px", textAlign: "center" }}>
+            <div style={{ ...F, fontSize: 12, color: C.amber, letterSpacing: 2, marginBottom: 8 }}>
+              RIKO — ALL DESIGNS REJECTED. REGENERATING...
+            </div>
+            <div style={{ ...F, fontSize: 10, color: C.muted, letterSpacing: 1 }}>
+              {regenerating
+                ? "Riko is generating new designs with a different approach"
+                : "Sending to Riko with a fresh brief..."}
+            </div>
+          </div>
+        ) : designs.length === 0 ? (
+          <EmptyState text="NO DESIGNS READY YET — APPROVE PROPOSALS TO GENERATE" />
+        ) : (
+          <>
+            <Label>DESIGNS AWAITING REVIEW ({designs.length})</Label>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+              {designs.map(d => (
+                <div key={d.id} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, overflow: "hidden" }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = C.active; e.currentTarget.style.boxShadow = C.glow; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.boxShadow = "none"; }}>
+                  {d.image_url && (
+                    <div style={{ position: "relative" }}>
+                      <img src={d.image_url} alt={d.title} style={{ width: "100%", height: 170, objectFit: "cover", display: "block" }} />
+                      <button onClick={() => onSelect(d)} style={{
+                        position: "absolute", top: 6, right: 6, ...F, fontSize: 9, color: C.text,
+                        background: "rgba(0,0,0,0.75)", border: `1px solid ${C.border}`, borderRadius: 3,
+                        padding: "3px 8px", cursor: "pointer", letterSpacing: 1 }}>[ EXPAND ]</button>
+                    </div>
+                  )}
+                  <div style={{ padding: "10px 12px" }}>
+                    <div style={{ ...F, fontSize: 10, color: C.text, marginBottom: 8, lineHeight: 1.4 }}>
+                      {d.title?.slice(0, 60)}{d.title?.length > 60 ? "…" : ""}
+                    </div>
+                    <div style={{ display: "flex", gap: 5 }}>
+                      <GreenBtn onClick={() => handleDecide(d.id, "design_approved")} style={{ flex: 1, padding: "5px 0", fontSize: 10 }}>[ APPROVE ]</GreenBtn>
+                      <RedBtn onClick={() => handleDecide(d.id, "design_rejected")} style={{ flex: 1, padding: "5px 0", fontSize: 10 }}>[ REJECT ]</RedBtn>
                     </div>
                   </div>
-                ))}
-              </div>
-            </>
-          )
-        }
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
       <AgentLog agentName="Riko" entries={entries} isActive={state === "running"} />
     </div>
@@ -1301,7 +1362,7 @@ export default function Dashboard() {
     <div style={{ display: "flex", height: "100vh", background: C.bg, color: C.text, overflow: "hidden" }}>
       <Sidebar active={activePage} setActive={setActivePage} agentStates={agentStates} counts={counts} />
 
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
         {/* Header */}
         <div style={{ height: 48, borderBottom: `1px solid ${C.border}`, display: "flex",
           alignItems: "center", gap: 14, padding: "0 20px", flexShrink: 0, background: C.bg }}>
@@ -1391,6 +1452,12 @@ export default function Dashboard() {
           {activePage === "logs"      && <LogsPage logs={logs} />}
           {activePage === "memory"    && <MemoryPage memory={memory} />}
         </div>
+      </div>
+
+      {/* Right column — Snow chat, always visible */}
+      <div style={{ width: 320, flexShrink: 0, borderLeft: `1px solid ${C.border}`,
+        height: "100vh", display: "flex", flexDirection: "column" }}>
+        <SnowChat />
       </div>
 
       {selectedDesign  && <DesignModal  design={selectedDesign}  onClose={() => setSelectedDesign(null)}  decideDesign={decideDesign} />}
