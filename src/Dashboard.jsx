@@ -1032,172 +1032,6 @@ function AgentHistoryPage({ name, role, Cat, entries, activeAgent }) {
   );
 }
 
-// ─── Research / Leon page ─────────────────────────────────
-function ResearchPage({ proposals, decide, activeAgent, refresh, entries }) {
-  const state   = activeAgent === "Leon" ? "running" : proposals.filter(p => p.status === "pending").length > 0 ? "waiting" : "idle";
-  const pending = proposals.filter(p => p.status === "pending");
-  const decided = proposals.filter(p => p.status !== "pending");
-
-  return (
-    <div>
-      <AgentPageHeader CatComp={ResearchCat} name="LEON" sub="claude-haiku-4.5 — Market Research Specialist" state={state}
-        rightSlot={
-          <GhostBtn onClick={() => deleteByStatus(["rejected"], refresh)} style={{ fontSize: 10, letterSpacing: 1 }}>
-            [ CLEAR REJECTED ]
-          </GhostBtn>
-        }
-      />
-      <TermLine text={`${pending.length} proposal${pending.length !== 1 ? "s" : ""} pending review`}
-        color={state === "running" ? C.active : C.muted} />
-      <div style={{ padding: "20px 26px" }}>
-        {pending.length > 0 && (
-          <>
-            <Label>AWAITING APPROVAL ({pending.length})</Label>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 22 }}>
-              {pending.map(pr => (
-                <div key={pr.id} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, padding: "12px 14px" }}>
-                  <div style={{ ...F, fontSize: 12, color: C.text, marginBottom: 4 }}>{pr.title}</div>
-                  <div style={{ ...F, fontSize: 10, color: C.muted, marginBottom: 10 }}>{pr.meta}</div>
-                  <div style={{ display: "flex", gap: 7 }}>
-                    <GreenBtn onClick={() => decide(pr.id, "approved")} style={{ flex: 1, padding: "6px", fontSize: 11 }}>[ APPROVE ]</GreenBtn>
-                    <RedBtn onClick={() => decide(pr.id, "rejected")} style={{ padding: "6px 18px", fontSize: 11 }}>[ REJECT ]</RedBtn>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-        {decided.length > 0 && (
-          <>
-            <Label>DECIDED</Label>
-            <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-              {decided.map(pr => (
-                <div key={pr.id} style={{ background: C.card, border: `1px solid #111`, borderRadius: 6,
-                  padding: "9px 14px", opacity: 0.5, display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ ...F, fontSize: 9, color: pr.status === "approved" ? C.active : C.danger,
-                    letterSpacing: 1, width: 56 }}>{pr.status === "approved" ? "approved" : "rejected"}</span>
-                  <span style={{ ...F, fontSize: 11, color: C.muted, flex: 1 }}>{pr.title}</span>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-        {proposals.length === 0 && <EmptyState text="NO PROPOSALS — LAUNCH THE PIPELINE" />}
-      </div>
-      <AgentLog agentName="Leon" entries={entries} isActive={state === "running"} />
-    </div>
-  );
-}
-
-// ─── Design / Riko page ────────────────────────────────────
-function DesignPage({ designs, decideDesign, activeAgent, onSelect, refresh, entries }) {
-  const [session, setSession]       = useState({ approved: 0, rejected: 0 });
-  const [allRejected, setAllRejected] = useState(false);
-  const [regenerating, setRegenerating] = useState(false);
-  const prevLengthRef = useRef(0);
-
-  // Reset session when new designs appear after the list was empty (post-regen)
-  useEffect(() => {
-    if (designs.length > 0 && prevLengthRef.current === 0) {
-      setSession({ approved: 0, rejected: 0 });
-      setAllRejected(false);
-      setRegenerating(false);
-    }
-    prevLengthRef.current = designs.length;
-  }, [designs.length]);
-
-  // Detect all-rejected: list emptied with no approvals this session
-  useEffect(() => {
-    if (session.rejected > 0 && session.approved === 0 && designs.length === 0) {
-      setAllRejected(true);
-    }
-  }, [designs.length, session]);
-
-  // Auto-trigger regen after brief delay so user sees the message
-  useEffect(() => {
-    if (!allRejected || regenerating) return;
-    const t = setTimeout(async () => {
-      setRegenerating(true);
-      setAllRejected(false);
-      try { await fetch(`${API}/step2`, { method: "POST" }); } catch (_) {}
-    }, 1800);
-    return () => clearTimeout(t);
-  }, [allRejected, regenerating]);
-
-  const handleDecide = (id, decision) => {
-    decideDesign(id, decision);
-    setSession(prev => ({
-      approved: prev.approved + (decision === "design_approved" ? 1 : 0),
-      rejected: prev.rejected + (decision === "design_rejected" ? 1 : 0),
-    }));
-  };
-
-  const isRikoRunning = activeAgent === "Riko" || regenerating;
-  const state = isRikoRunning ? "running" : designs.length > 0 ? "waiting" : "idle";
-
-  return (
-    <div>
-      <AgentPageHeader CatComp={DesignCat} name="RIKO" sub="flux-schnell via Replicate — Visual Design Specialist" state={state}
-        rightSlot={
-          <GhostBtn onClick={() => deleteByStatus(["design_rejected"], refresh)} style={{ fontSize: 10, letterSpacing: 1 }}>
-            [ CLEAR REJECTED ]
-          </GhostBtn>
-        }
-      />
-      <TermLine text={`${designs.length} design${designs.length !== 1 ? "s" : ""} awaiting review`}
-        color={state === "running" ? C.active : C.muted} />
-      <div style={{ padding: "20px 26px" }}>
-        {allRejected || regenerating ? (
-          <div style={{ background: C.card, border: `1px solid ${C.amber}44`, borderRadius: 6,
-            padding: "32px 24px", textAlign: "center" }}>
-            <div style={{ ...F, fontSize: 12, color: C.amber, letterSpacing: 2, marginBottom: 8 }}>
-              RIKO — ALL DESIGNS REJECTED. REGENERATING...
-            </div>
-            <div style={{ ...F, fontSize: 10, color: C.muted, letterSpacing: 1 }}>
-              {regenerating
-                ? "Riko is generating new designs with a different approach"
-                : "Sending to Riko with a fresh brief..."}
-            </div>
-          </div>
-        ) : designs.length === 0 ? (
-          <EmptyState text="NO DESIGNS READY YET — APPROVE PROPOSALS TO GENERATE" />
-        ) : (
-          <>
-            <Label>DESIGNS AWAITING REVIEW ({designs.length})</Label>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-              {designs.map(d => (
-                <div key={d.id} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, overflow: "hidden" }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = C.active; e.currentTarget.style.boxShadow = C.glow; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.boxShadow = "none"; }}>
-                  {d.image_url && (
-                    <div style={{ position: "relative" }}>
-                      <img src={d.image_url} alt={d.title} style={{ width: "100%", height: 170, objectFit: "cover", display: "block" }} />
-                      <button onClick={() => onSelect(d)} style={{
-                        position: "absolute", top: 6, right: 6, ...F, fontSize: 9, color: C.text,
-                        background: "rgba(0,0,0,0.75)", border: `1px solid ${C.border}`, borderRadius: 3,
-                        padding: "3px 8px", cursor: "pointer", letterSpacing: 1 }}>[ EXPAND ]</button>
-                    </div>
-                  )}
-                  <div style={{ padding: "10px 12px" }}>
-                    <div style={{ ...F, fontSize: 10, color: C.text, marginBottom: 8, lineHeight: 1.4 }}>
-                      {d.title?.slice(0, 60)}{d.title?.length > 60 ? "…" : ""}
-                    </div>
-                    <div style={{ display: "flex", gap: 5 }}>
-                      <GreenBtn onClick={() => handleDecide(d.id, "design_approved")} style={{ flex: 1, padding: "5px 0", fontSize: 10 }}>[ APPROVE ]</GreenBtn>
-                      <RedBtn onClick={() => handleDecide(d.id, "design_rejected")} style={{ flex: 1, padding: "5px 0", fontSize: 10 }}>[ REJECT ]</RedBtn>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
-      <AgentLog agentName="Riko" entries={entries} isActive={state === "running"} />
-    </div>
-  );
-}
-
 // ─── Listing / Snoopy page ─────────────────────────────────
 function ListingPage({ listings, activeAgent, onSelect, entries }) {
   const state = activeAgent === "Snoopy" ? "running" : listings.length > 0 ? "waiting" : "idle";
@@ -1375,28 +1209,6 @@ function MemoryPage({ memory }) {
 }
 
 // ─── Modals ────────────────────────────────────────────────
-function DesignModal({ design, onClose, decideDesign }) {
-  return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.94)",
-      display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, cursor: "pointer" }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: C.card, border: `1px solid ${C.active}`,
-        borderRadius: 6, overflow: "hidden", maxWidth: 560, width: "92%", cursor: "default",
-        boxShadow: C.glowStrong }}>
-        <img src={design.image_url} alt={design.title}
-          style={{ width: "100%", maxHeight: 480, objectFit: "contain", background: "#050505", display: "block" }} />
-        <div style={{ padding: "14px 16px", borderTop: `1px solid ${C.border}` }}>
-          <div style={{ ...F, fontSize: 12, color: C.text, marginBottom: 12 }}>{design.title}</div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <GreenBtn onClick={() => { decideDesign(design.id, "design_approved"); onClose(); }} style={{ flex: 1, padding: "8px", fontSize: 11 }}>[ OK ]</GreenBtn>
-            <RedBtn onClick={() => { decideDesign(design.id, "design_rejected"); onClose(); }} style={{ flex: 1, padding: "8px", fontSize: 11 }}>[ REDO ]</RedBtn>
-            <GhostBtn onClick={onClose} style={{ padding: "8px 16px", fontSize: 11 }}>[ CLOSE ]</GhostBtn>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function ListingModal({ listing, onClose }) {
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.94)",
@@ -1495,7 +1307,7 @@ export default function Dashboard() {
     () => !!localStorage.getItem("projectsnow_unlocked")
   );
 
-  const { packages, review: reviewPackage, refresh: refreshPackages } = usePackages();
+  const { packages, review: reviewPackage } = usePackages();
   const { listings } = useReadyListings();
   const { status: pipelineStatus } = usePipelineStatus();
   const { logs } = usePipelineLogs();
