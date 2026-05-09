@@ -1040,6 +1040,7 @@ export default function Dashboard() {
             onBlur={e => e.target.style.borderColor = C.border}
           />
           {isRunning ? (
+            // Pipeline actively running — disable all actions
             <GhostBtn disabled style={{ fontSize: 11, letterSpacing: 1,
               animation: "pulse 1.4s ease-in-out infinite", borderColor: C.active + "44", color: C.muted }}>
               [ GO NAP ]
@@ -1047,6 +1048,7 @@ export default function Dashboard() {
           ) : launching ? (
             <GhostBtn disabled style={{ fontSize: 11, letterSpacing: 1, color: C.muted }}>LAUNCHING...</GhostBtn>
           ) : pipelineStep === "waiting_approval" ? (
+            // Step 1 done — user approved proposals in dashboard, ready to generate designs
             <button onClick={runStep2} style={{ ...F, fontSize: 11, letterSpacing: 1, cursor: "pointer",
               background: "transparent", color: C.amber, border: `1px solid ${C.amber}88`,
               borderRadius: 4, padding: "5px 14px",
@@ -1056,6 +1058,7 @@ export default function Dashboard() {
               [ RUN DESIGN ]
             </button>
           ) : pipelineStep === "waiting_review" ? (
+            // Step 2 done — user approved designs in dashboard, ready to write listings
             <button onClick={runStep3} style={{ ...F, fontSize: 11, letterSpacing: 1, cursor: "pointer",
               background: "transparent", color: C.cyan, border: `1px solid ${C.cyan}88`,
               borderRadius: 4, padding: "5px 14px",
@@ -1065,6 +1068,7 @@ export default function Dashboard() {
               [ RUN LISTING ]
             </button>
           ) : (
+            // No status, status="complete", or any unknown state — start fresh
             <GreenBtn onClick={launch} style={{ fontSize: 11, letterSpacing: 1 }}>
               [ GO WORK ]
             </GreenBtn>
