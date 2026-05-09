@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
   useProposals, useDesigns, useReadyListings,
-  useSnowReport, usePipelineStatus, usePipelineLogs, useSnowMemory, useSnowChat
+  usePipelineStatus, usePipelineLogs, useSnowMemory, useSnowChat
 } from "./useAirtable";
 
 // ─── Design tokens ────────────────────────────────────────
@@ -795,50 +795,6 @@ function OverviewPage({ setActive }) {
 
       {/* Direct line chat */}
       <SnowChat />
-    </div>
-  );
-}
-
-// ─── System log ───────────────────────────────────────────
-function SystemLog({ entries }) {
-  const scrollRef = useRef(null);
-  useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [entries]);
-
-  const lineColor = (type) => {
-    if (type === "success") return C.active;
-    if (type === "error")   return C.danger;
-    if (type === "warning") return C.amber;
-    return C.cyan;
-  };
-
-  return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6,
-      overflow: "hidden", marginBottom: 18 }}>
-      <div style={{ padding: "7px 14px", borderBottom: `1px solid ${C.border}`,
-        display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={{ ...F, fontSize: 9, color: C.active, letterSpacing: 2 }}>SYSTEM LOG</span>
-        <span style={{ width: 6, height: 6, borderRadius: "50%", background: C.active,
-          display: "inline-block", animation: "pulse 1.4s ease-in-out infinite",
-          boxShadow: `0 0 5px ${C.active}` }} />
-      </div>
-      <div ref={scrollRef} style={{ background: "#050505", padding: "10px 14px", height: 190,
-        overflowY: "auto", display: "flex", flexDirection: "column", gap: 1 }}>
-        {entries.slice(-10).map(entry => (
-          <div key={entry.id} style={{ ...F, fontSize: 10, lineHeight: 1.8 }}>
-            <span style={{ color: "#334433" }}>[{entry.time}]</span>
-            <span style={{ color: C.active, margin: "0 7px" }}>{entry.agent}</span>
-            <span style={{ color: "#223322" }}>—</span>
-            <span style={{ marginLeft: 7, color: lineColor(entry.type) }}>{entry.message}</span>
-          </div>
-        ))}
-        {entries.length === 0 && (
-          <span style={{ ...F, fontSize: 10, color: C.muted }}>Waiting for pipeline activity...</span>
-        )}
-        <div style={{ ...F, fontSize: 10, color: C.active, animation: "blink 1.1s step-end infinite",
-          marginTop: 2, lineHeight: 1 }}>_</div>
-      </div>
     </div>
   );
 }
