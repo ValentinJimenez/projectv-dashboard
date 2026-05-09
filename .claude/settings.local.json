@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir C:\\\\Users\\\\Vaale\\\\Documents *)",
+      "Bash(git add *)",
+      "Bash(git commit *)"
+    ]
+  }
+}
