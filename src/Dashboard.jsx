@@ -233,6 +233,21 @@ function useLastMeeting() {
   return meeting;
 }
 
+function useSnowCritiques() {
+  const [critiques, setCritiques] = useState([]);
+  useEffect(() => {
+    const f = async () => {
+      try {
+        const res  = await fetch(`${API}/snow/critiques`);
+        const data = await res.json();
+        setCritiques(data.critiques || []);
+      } catch (_) {}
+    };
+    f(); const t = setInterval(f, 30000); return () => clearInterval(t);
+  }, []);
+  return critiques;
+}
+
 // Fetches all production packages with all fields (including new: mockup_url, snow_brief, etc.)
 function useAllProductionPackages() {
   const [allPackages, setAllPackages] = useState([]);
@@ -552,6 +567,7 @@ function OverviewPage({ setActive, pipelineStatus, pendingPackages, listings, al
   const { decisions, resolve } = usePendingDecisions();
   const agentsStatus = useAgentsStatus();
   const lastMeeting  = useLastMeeting();
+  const critiques    = useSnowCritiques();
   const [meetingBusy, setMeetingBusy] = useState(false);
   const [modifyId, setModifyId] = useState(null);
   const [modifyNote, setModifyNote] = useState("");
@@ -626,6 +642,45 @@ function OverviewPage({ setActive, pipelineStatus, pendingPackages, listings, al
           <div style={{ ...F, fontSize: 7, color: C.snow, letterSpacing: 2, marginBottom: 6 }}>❄️ SNOW'S LATEST BRIEF</div>
           <div style={{ ...F, fontSize: 9, color: `${C.snow}cc`, lineHeight: 1.7, fontStyle: "italic" }}>
             {latestBrief.slice(0, 200)}{latestBrief.length > 200 ? "..." : ""}
+          </div>
+        </div>
+      )}
+
+      {/* Snow's Learning Log */}
+      {critiques.length > 0 && (
+        <div style={{ background: C.card, border: `1px solid ${C.accent}33`, borderRadius: 10,
+          padding: "14px 16px", marginBottom: 18 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+            <span style={{ ...F, fontSize: 8, color: C.accent, letterSpacing: 2, textTransform: "uppercase" }}>❄️ SNOW'S LEARNING LOG</span>
+            <Badge text={`${critiques.length} entries`} color={C.accent} />
+            <button onClick={() => setActive("memory")}
+              style={{ ...F, fontSize: 8, color: C.muted, background: "transparent", border: "none",
+                cursor: "pointer", letterSpacing: 1, marginLeft: "auto", textTransform: "uppercase" }}>
+              VIEW ALL →
+            </button>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {critiques.slice(0, 3).map((c, i) => {
+              const dateStr = (c.created_at || "").slice(0, 16).replace("T", " ");
+              const isApproved  = c.text?.includes("APPROVED");
+              const isRejected  = c.text?.includes("REJECTED");
+              const dotColor    = isApproved ? C.success : isRejected ? C.danger : C.accent;
+              // Extract just the critique body (after the header lines)
+              const lines = (c.text || "").split("\n").filter(l => l.trim());
+              const bodyStart = lines.findIndex(l => !l.startsWith("SELF-CRITIQUE") && !l.startsWith("Decision:") && !l.startsWith("Package:"));
+              const body = lines.slice(bodyStart >= 0 ? bodyStart : 2).join(" ").slice(0, 220);
+              return (
+                <div key={i} style={{ borderLeft: `2px solid ${dotColor}44`, paddingLeft: 10 }}>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 3 }}>
+                    <StatusDot color={dotColor} />
+                    <span style={{ ...F, fontSize: 7, color: C.muted, letterSpacing: 0.5 }}>{dateStr}</span>
+                  </div>
+                  <div style={{ ...F, fontSize: 9, color: `${C.accent}cc`, lineHeight: 1.6, fontStyle: "italic" }}>
+                    {body || c.text?.slice(0, 200)}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -1209,10 +1264,13 @@ function LogsPage({ logs }) {
 
 // ─── Memory page ─────────────────────────────────────────────
 function MemoryPage({ memory }) {
-  const [filter, setFilter] = useState("all");
-  const cats  = ["all", ...Array.from(new Set(memory.map(m => m.category)))];
+  const [filter, setFilter] = useState("self_critique");
+  // Put self_critique first in the category list
+  const allCats = Array.from(new Set(memory.map(m => m.category)));
+  const sortedCats = ["self_critique", ...allCats.filter(c => c !== "self_critique")];
+  const cats  = ["all", ...sortedCats];
   const shown = filter === "all" ? memory : memory.filter(m => m.category === filter);
-  const catColor = (c) => ({ approved: C.success, rejected: C.danger, trend: C.cyan, avoid: C.amber, brief: C.snow })[c] || C.accent;
+  const catColor = (c) => ({ approved: C.success, rejected: C.danger, trend: C.cyan, avoid: C.amber, brief: C.snow, self_critique: C.accent })[c] || C.accent;
   return (
     <div style={{ padding: "20px 22px" }}>
       <div style={{ ...F, fontSize: 14, color: C.accent, letterSpacing: 2, marginBottom: 4 }}>SNOW MEMORY</div>
@@ -1230,14 +1288,21 @@ function MemoryPage({ memory }) {
       </div>
       {shown.length === 0 ? <EmptyState text="NO ENTRIES" /> : (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {shown.map(m => (
-            <div key={m.id} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8,
-              padding: "10px 13px", display: "flex", gap: 10, alignItems: "flex-start" }}>
-              <Badge text={m.category} color={catColor(m.category)} />
-              <div style={{ ...F, fontSize: 10, color: C.muted, flex: 1, lineHeight: 1.6 }}>{m.observation}</div>
-              <div style={{ ...F, fontSize: 8, color: `${C.muted}66`, whiteSpace: "nowrap" }}>{m.created_at?.slice(0, 10) || ""}</div>
-            </div>
-          ))}
+          {shown.map(m => {
+            const isCritique = m.category === "self_critique";
+            return (
+              <div key={m.id} style={{ background: C.card,
+                border: `1px solid ${isCritique ? C.accent + "44" : C.border}`,
+                borderLeft: isCritique ? `3px solid ${C.accent}` : `1px solid ${C.border}`,
+                borderRadius: 8, padding: "10px 13px", display: "flex", gap: 10, alignItems: "flex-start",
+                boxShadow: isCritique ? C.glow : "none" }}>
+                <Badge text={m.category} color={catColor(m.category)} />
+                <div style={{ ...F, fontSize: 10, color: isCritique ? `${C.accent}cc` : C.muted,
+                  flex: 1, lineHeight: 1.6, fontStyle: isCritique ? "italic" : "normal" }}>{m.observation}</div>
+                <div style={{ ...F, fontSize: 8, color: `${C.muted}66`, whiteSpace: "nowrap" }}>{m.created_at?.slice(0, 10) || ""}</div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
