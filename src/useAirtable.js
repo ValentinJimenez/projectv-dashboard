@@ -6,7 +6,6 @@ const API_KEY = process.env.REACT_APP_AIRTABLE_API_KEY;
 const SNOW_TABLE = process.env.REACT_APP_SNOW_TABLE_ID;
 const MEMORY_TABLE = process.env.REACT_APP_SNOW_MEMORY_TABLE_ID;
 const LOGS_TABLE = process.env.REACT_APP_PIPELINE_LOGS_TABLE_ID;
-const CHAT_TABLE = process.env.REACT_APP_CHAT_TABLE_ID;
 
 const headers = { Authorization: `Bearer ${API_KEY}` };
 
