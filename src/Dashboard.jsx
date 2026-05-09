@@ -1,447 +1,752 @@
 import { useState } from "react";
-import { useProposals, useDesigns, useReadyListings, useSnowReport, usePipelineStatus } from "./useAirtable";
+import {
+  useProposals, useDesigns, useReadyListings,
+  useSnowReport, usePipelineStatus, usePipelineLogs, useSnowMemory
+} from "./useAirtable";
 
-const p = {
-  bg: "#13100c", card: "#1c1610", border: "#2c2118", surface: "#100e08",
-  text: "#ede0cc", muted: "#8a7660", faint: "#2c2118",
-  accent: "#c4a06a", accentDim: "#281e10",
-  green: "#7aaa7a", greenDim: "#162016",
-  amber: "#d4905a", amberDim: "#2a1610",
-  blue: "#7a9ab8", blueDim: "#101a26",
-  terra: "#b87a6a", terraDim: "#261410",
+// ── Color tokens ──────────────────────────────────────────
+const c = {
+  bg: "#0a0a0a",
+  card: "#111111",
+  border: "#1a1a1a",
+  text: "#e8e8e8",
+  muted: "#555555",
+  faint: "#222222",
+  accent: "#ffffff",
+  glow: "#333333",
+  green: "#4ade80",
+  greenDim: "#0a1f12",
+  red: "#f87171",
+  redDim: "#1f0a0a",
+  amber: "#fbbf24",
+  amberDim: "#1f1500",
 };
 
+const mono = { fontFamily: "ui-monospace, 'Cascadia Code', monospace" };
+const sys = { fontFamily: "system-ui, -apple-system, sans-serif" };
+
 // ── Cat SVGs ──────────────────────────────────────────────
-const SleepingCat = ({ color = "#e8d4b8", size = 38 }) => (
-  <svg width={size} height={size} viewBox="0 0 44 40" fill="none">
-    <ellipse cx="18" cy="26" rx="14" ry="10" fill={color}/>
-    <circle cx="32" cy="18" r="9" fill={color}/>
-    <polygon points="26,11 28,5 32,11" fill={color}/>
-    <polygon points="32,11 36,5 38,11" fill={color}/>
-    <path d="M4,26 Q1,16 7,12 Q11,9 9,16" stroke={color} strokeWidth="3.5" fill="none" strokeLinecap="round"/>
-    <path d="M28,18 Q32,16.5 36,18" stroke={p.surface} strokeWidth="2" fill="none" strokeLinecap="round"/>
-    <ellipse cx="14" cy="33" rx="4" ry="2.5" fill={color} opacity="0.6"/>
-    <ellipse cx="23" cy="34" rx="4" ry="2.5" fill={color} opacity="0.6"/>
+// Sleeping loaf cat — 3 paths max
+const LoafCat = ({ size = 36, dotColor = null }) => (
+  <svg width={size} height={size} viewBox="0 0 40 36" fill="none" style={{ display: "block" }}>
+    <ellipse cx="20" cy="24" rx="16" ry="11" fill={c.accent} opacity="0.9" />
+    <polygon points="9,14 7,7 13,13" fill={c.accent} opacity="0.9" />
+    <polygon points="27,13 31,7 33,13" fill={c.accent} opacity="0.9" />
+    <path d="M14,22 Q17,20.5 20,22 Q23,20.5 26,22" stroke={c.bg} strokeWidth="1.6" fill="none" strokeLinecap="round" />
+    {dotColor && <circle cx="36" cy="6" r="4" fill={dotColor} />}
   </svg>
 );
 
-const AlertCat = ({ color = "#7a9ab8", size = 32, active = false }) => (
-  <svg width={size} height={size} viewBox="0 0 40 44" fill="none">
-    <ellipse cx="20" cy="34" rx="10" ry="8" fill={color}/>
-    <circle cx="20" cy="18" r="10" fill={color}/>
-    <polygon points="13,11 10,3 17,9" fill={color}/>
-    <polygon points="27,11 30,3 23,9" fill={color}/>
-    <circle cx="16.5" cy="17" r={active ? 2.5 : 2} fill={p.surface}/>
-    <circle cx="23.5" cy="17" r={active ? 2.5 : 2} fill={p.surface}/>
-    <circle cx="17" cy="16.2" r="1" fill="white" opacity="0.7"/>
-    <circle cx="24" cy="16.2" r="1" fill="white" opacity="0.7"/>
-    <path d="M30,34 Q38,26 35,36" stroke={color} strokeWidth="3" fill="none" strokeLinecap="round"/>
+// Upright cat — for agents
+const AgentCat = ({ size = 32, color = c.accent, dotColor = null }) => (
+  <svg width={size} height={size} viewBox="0 0 36 40" fill="none" style={{ display: "block" }}>
+    <ellipse cx="18" cy="32" rx="11" ry="7" fill={color} />
+    <circle cx="18" cy="17" r="11" fill={color} />
+    <polygon points="10,9 8,2 14,8" fill={color} />
+    <polygon points="26,9 28,2 22,8" fill={color} />
+    <circle cx="14.5" cy="16" r="2.2" fill={c.bg} />
+    <circle cx="21.5" cy="16" r="2.2" fill={c.bg} />
+    <circle cx="15" cy="15.2" r="0.9" fill="rgba(255,255,255,0.6)" />
+    <circle cx="22" cy="15.2" r="0.9" fill="rgba(255,255,255,0.6)" />
+    {dotColor && <circle cx="32" cy="4" r="4" fill={dotColor} />}
   </svg>
 );
 
-const ArtistCat = ({ color = "#d4905a", size = 32, active = false }) => (
-  <svg width={size} height={size} viewBox="0 0 40 44" fill="none">
-    <ellipse cx="20" cy="34" rx="9" ry="7" fill={color}/>
-    <circle cx="22" cy="18" r="10" fill={color}/>
-    <polygon points="15,11 12,4 18,9" fill={color}/>
-    <polygon points="28,10 32,3 25,9" fill={color}/>
-    <circle cx="18.5" cy="17" r={active ? 3 : 2.5} fill={p.surface}/>
-    <circle cx="25.5" cy="16" r={active ? 2.5 : 2} fill={p.surface}/>
-    <circle cx="19" cy="16" r="1.2" fill="white" opacity="0.7"/>
-    <path d="M13,28 Q8,20 11,14" stroke={color} strokeWidth="3.5" fill="none" strokeLinecap="round"/>
-    <circle cx="11" cy="12.5" r="3" fill={color}/>
-  </svg>
+// ── Shared UI atoms ───────────────────────────────────────
+const Badge = ({ label, style: extra = {} }) => (
+  <span style={{
+    ...mono, fontSize: 9, padding: "2px 8px", borderRadius: 4,
+    border: `1px solid ${c.border}`, color: c.muted,
+    letterSpacing: 0.8, textTransform: "uppercase",
+    ...extra,
+  }}>{label}</span>
 );
 
-const ProudCat = ({ color = "#7aaa7a", size = 32, active = false }) => (
-  <svg width={size} height={size} viewBox="0 0 40 44" fill="none">
-    <ellipse cx="20" cy="34" rx="9" ry="9" fill={color}/>
-    <circle cx="20" cy="17" r="10" fill={color}/>
-    <polygon points="13,10 11,3 17,9" fill={color}/>
-    <polygon points="27,10 29,3 23,9" fill={color}/>
-    <path d="M15,17 Q17,15.5 19,17" stroke={p.surface} strokeWidth="1.8" fill="none" strokeLinecap="round"/>
-    <path d="M21,17 Q23,15.5 25,17" stroke={p.surface} strokeWidth="1.8" fill="none" strokeLinecap="round"/>
-    <path d="M30,32 Q38,25 34,38 Q28,42 20,40" stroke={color} strokeWidth="3" fill="none" strokeLinecap="round"/>
-  </svg>
+const StatusDot = ({ state }) => {
+  const color = state === "running" ? c.green : state === "waiting" ? c.amber : c.muted;
+  return (
+    <span style={{
+      display: "inline-block", width: 6, height: 6, borderRadius: "50%",
+      background: color, flexShrink: 0,
+      boxShadow: state === "running" ? `0 0 6px ${c.green}` : "none",
+    }} />
+  );
+};
+
+const SectionLabel = ({ children }) => (
+  <div style={{ ...mono, fontSize: 9, letterSpacing: 2, textTransform: "uppercase", color: c.muted, marginBottom: 10 }}>
+    {children}
+  </div>
 );
 
-const WatchfulCat = ({ color = "#b87a6a", size = 32 }) => (
-  <svg width={size} height={size} viewBox="0 0 40 44" fill="none">
-    <ellipse cx="20" cy="30" rx="13" ry="10" fill={color}/>
-    <circle cx="20" cy="17" r="10" fill={color}/>
-    <polygon points="13,10 11,3 17,9" fill={color}/>
-    <polygon points="27,10 29,3 23,9" fill={color}/>
-    <circle cx="16.5" cy="16" r="2.5" fill={p.surface}/>
-    <circle cx="17" cy="15.2" r="1" fill="white" opacity="0.7"/>
-    <path d="M21,16 Q23,14.5 25,16" stroke={p.surface} strokeWidth="1.8" fill="none" strokeLinecap="round"/>
-    <ellipse cx="13" cy="38" rx="3.5" ry="2" fill={color} opacity="0.6"/>
-    <ellipse cx="27" cy="38" rx="3.5" ry="2" fill={color} opacity="0.6"/>
-  </svg>
+const EmptyState = ({ text }) => (
+  <div style={{ ...mono, fontSize: 11, color: c.muted, textAlign: "center", padding: "28px 0" }}>{text}</div>
 );
 
-// ── Helpers ───────────────────────────────────────────────
-const Pill = ({ label, color, bg, border }) => (
-  <span style={{ fontSize: 9, padding: "2px 9px", borderRadius: 20, background: bg, color, border: `1px solid ${border || color + "33"}`, letterSpacing: 1, textTransform: "uppercase", fontWeight: 600, whiteSpace: "nowrap" }}>
-    {label}
-  </span>
-);
+const Btn = ({ onClick, children, variant = "default", style: extra = {}, ...rest }) => {
+  const variants = {
+    default: { background: c.faint, color: c.muted, border: `1px solid ${c.border}` },
+    approve: { background: c.greenDim, color: c.green, border: `1px solid ${c.green}33` },
+    reject: { background: c.redDim, color: c.red, border: `1px solid ${c.red}33` },
+    primary: { background: c.glow, color: c.accent, border: `1px solid ${c.border}` },
+  };
+  return (
+    <button onClick={onClick} style={{
+      ...mono, fontSize: 10, fontWeight: 600, padding: "5px 12px",
+      borderRadius: 8, cursor: "pointer", letterSpacing: 0.4,
+      transition: "all 0.15s",
+      ...variants[variant],
+      ...extra,
+    }} {...rest}>{children}</button>
+  );
+};
 
-const CardHeader = ({ cat, name, model, statusLabel, statusColor, statusBg, active }) => (
-  <div style={{ padding: "12px 14px", borderBottom: `1px solid ${p.faint}`, display: "flex", alignItems: "center", gap: 10 }}>
-    <div style={{ width: 42, height: 42, borderRadius: 10, background: statusBg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, boxShadow: active ? `0 0 12px ${statusColor}44` : "none", transition: "box-shadow 0.5s" }}>
-      {cat}
+// ── Agent page header ─────────────────────────────────────
+const AgentHeader = ({ name, model, state, catColor = c.accent, subtitle }) => (
+  <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "20px 24px 16px", borderBottom: `1px solid ${c.border}` }}>
+    <div style={{ width: 52, height: 52, borderRadius: 12, background: c.card, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+      <AgentCat size={34} color={catColor} />
     </div>
     <div style={{ flex: 1 }}>
-      <div style={{ fontSize: 12, fontWeight: 700, color: p.text }}>{name}</div>
-      <div style={{ fontSize: 10, color: p.muted, fontFamily: "monospace", marginTop: 1 }}>{model}</div>
+      <div style={{ ...sys, fontSize: 16, fontWeight: 600, color: c.text, marginBottom: 2 }}>{name}</div>
+      <div style={{ ...mono, fontSize: 10, color: c.muted }}>{subtitle || model}</div>
     </div>
-    <Pill label={statusLabel} color={statusColor} bg={statusBg} />
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <StatusDot state={state} />
+      <span style={{ ...mono, fontSize: 10, color: c.muted, textTransform: "capitalize" }}>{state}</span>
+    </div>
   </div>
 );
 
-const Terminal = ({ line1, line2, color }) => (
-  <div style={{ padding: "7px 14px", background: p.surface, borderBottom: `1px solid ${p.faint}`, fontFamily: "monospace", fontSize: 10, color: p.muted, lineHeight: 1.9 }}>
-    <span style={{ color }}>{line1}</span><br />
-    <span style={{ color: p.faint }}>{line2}</span>
+const TerminalLine = ({ text, color = c.muted }) => (
+  <div style={{ padding: "8px 24px", background: "#0d0d0d", borderBottom: `1px solid ${c.border}`, ...mono, fontSize: 10, color }}>
+    <span style={{ color: c.muted, marginRight: 8 }}>$</span>{text}
   </div>
 );
 
-// ── Main Dashboard ────────────────────────────────────────
+// ── Sidebar ───────────────────────────────────────────────
+const NAV = [
+  { id: "overview", label: "Overview", sub: "Snow's view" },
+  { id: "research", label: "Research Agent", sub: "Trend scanner" },
+  { id: "design", label: "Design Agent", sub: "Image generator" },
+  { id: "strategy", label: "Strategy Agent", sub: "Coming soon", disabled: true },
+  { id: "listing", label: "Listing Agent", sub: "SEO writer" },
+  { id: "feedback", label: "Feedback Agent", sub: "Performance" },
+];
+
+const SECONDARY = [
+  { id: "logs", label: "Pipeline Logs" },
+  { id: "memory", label: "Snow Memory" },
+];
+
+function Sidebar({ active, setActive, agentStates, counts }) {
+  return (
+    <div style={{
+      width: 220, flexShrink: 0, background: c.card, borderRight: `1px solid ${c.border}`,
+      display: "flex", flexDirection: "column", height: "100vh", position: "sticky", top: 0,
+    }}>
+      {/* Logo */}
+      <div style={{ padding: "20px 18px 16px", borderBottom: `1px solid ${c.border}` }}>
+        <div style={{ ...mono, fontSize: 9, color: c.muted, letterSpacing: 2, textTransform: "uppercase", marginBottom: 4 }}>Agent Ops</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <LoafCat size={28} />
+          <span style={{ ...sys, fontSize: 15, fontWeight: 700, color: c.text, letterSpacing: 0.5 }}>ProjectSnow</span>
+        </div>
+      </div>
+
+      {/* Main nav */}
+      <div style={{ padding: "10px 8px", flex: 1 }}>
+        {NAV.map(item => {
+          const isActive = active === item.id;
+          const state = agentStates[item.id] || "idle";
+          const count = counts[item.id];
+          return (
+            <button key={item.id}
+              onClick={() => !item.disabled && setActive(item.id)}
+              disabled={item.disabled}
+              style={{
+                width: "100%", textAlign: "left", background: isActive ? c.glow : "transparent",
+                border: isActive ? `1px solid ${c.border}` : "1px solid transparent",
+                borderRadius: 8, padding: "8px 10px", cursor: item.disabled ? "default" : "pointer",
+                marginBottom: 2, display: "flex", alignItems: "center", gap: 9,
+                opacity: item.disabled ? 0.35 : 1, transition: "all 0.12s",
+              }}>
+              <StatusDot state={item.disabled ? "idle" : state} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ ...sys, fontSize: 12, fontWeight: isActive ? 600 : 400, color: isActive ? c.text : c.muted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{item.label}</div>
+                <div style={{ ...mono, fontSize: 9, color: "#333", marginTop: 1 }}>{item.sub}</div>
+              </div>
+              {count > 0 && (
+                <span style={{ ...mono, fontSize: 9, background: c.faint, color: c.muted, borderRadius: 4, padding: "1px 5px", border: `1px solid ${c.border}` }}>{count}</span>
+              )}
+            </button>
+          );
+        })}
+
+        <div style={{ height: 1, background: c.border, margin: "12px 4px" }} />
+
+        {SECONDARY.map(item => {
+          const isActive = active === item.id;
+          return (
+            <button key={item.id} onClick={() => setActive(item.id)} style={{
+              width: "100%", textAlign: "left", background: isActive ? c.glow : "transparent",
+              border: isActive ? `1px solid ${c.border}` : "1px solid transparent",
+              borderRadius: 8, padding: "8px 10px", cursor: "pointer", marginBottom: 2,
+              transition: "all 0.12s",
+            }}>
+              <span style={{ ...sys, fontSize: 12, fontWeight: isActive ? 600 : 400, color: isActive ? c.text : c.muted }}>{item.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Overview page ─────────────────────────────────────────
+function OverviewPage({ report, pipelineStatus, proposals, designs, listings, memory }) {
+  const steps = ["Research Agent", "Design Agent", "Listing Agent", "Feedback Agent"];
+  const activeAgent = pipelineStatus?.active_agent;
+  const isRunning = pipelineStatus?.running;
+  const activeIdx = steps.indexOf(activeAgent);
+
+  const approved = proposals.filter(p => p.status === "approved");
+
+  return (
+    <div style={{ padding: "24px 28px", maxWidth: 860 }}>
+
+      {/* Snow identity */}
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 16, marginBottom: 28 }}>
+        <div style={{ width: 60, height: 60, borderRadius: 14, background: c.card, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <LoafCat size={42} />
+        </div>
+        <div style={{ paddingTop: 4 }}>
+          <div style={{ ...sys, fontSize: 22, fontWeight: 700, color: c.text, marginBottom: 2 }}>Snow</div>
+          <div style={{ ...mono, fontSize: 11, color: c.muted, marginBottom: 6 }}>Ruthless Market Analyst</div>
+          <Badge label="claude-opus-4.6" style={{ color: c.accent, borderColor: c.border }} />
+        </div>
+      </div>
+
+      {/* Pipeline status bar */}
+      <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 12, padding: "14px 18px", marginBottom: 20 }}>
+        <SectionLabel>Pipeline Status</SectionLabel>
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          {steps.map((step, i) => {
+            const isActive = activeIdx === i && isRunning;
+            const isDone = activeIdx > i && isRunning;
+            return (
+              <div key={step} style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
+                <div style={{
+                  flex: 1, background: isActive ? c.glow : isDone ? "#1a2a1a" : c.faint,
+                  border: `1px solid ${isActive ? c.accent : isDone ? c.green + "44" : c.border}`,
+                  borderRadius: 8, padding: "7px 10px", transition: "all 0.4s",
+                }}>
+                  <div style={{ ...mono, fontSize: 9, color: isActive ? c.text : isDone ? c.green : c.muted, whiteSpace: "nowrap" }}>
+                    {isActive && <span style={{ marginRight: 5 }}>&#9679;</span>}{step}
+                  </div>
+                </div>
+                {i < steps.length - 1 && <span style={{ color: c.border, ...mono, fontSize: 10 }}>›</span>}
+              </div>
+            );
+          })}
+          {!isRunning && (
+            <div style={{ ...mono, fontSize: 9, color: c.muted, marginLeft: 8, whiteSpace: "nowrap" }}>idle</div>
+          )}
+        </div>
+      </div>
+
+      {/* Quick stats grid */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 20 }}>
+        {[
+          { label: "Proposals Reviewed", value: proposals.length },
+          { label: "Approval Rate", value: proposals.length ? `${Math.round(approved.length / proposals.length * 100)}%` : "—" },
+          { label: "Designs Generated", value: designs.length },
+          { label: "Listings Ready", value: listings.length },
+        ].map(stat => (
+          <div key={stat.label} style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 12, padding: "14px 16px" }}>
+            <div style={{ ...mono, fontSize: 20, fontWeight: 700, color: c.text, marginBottom: 4 }}>{stat.value}</div>
+            <div style={{ ...sys, fontSize: 10, color: c.muted }}>{stat.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Snow report card */}
+      <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 12, padding: "16px 18px", marginBottom: 20 }}>
+        <SectionLabel>Last Report</SectionLabel>
+        {report ? (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            <div>
+              <div style={{ ...sys, fontSize: 10, color: c.muted, marginBottom: 6 }}>Priority Niche</div>
+              <div style={{ ...mono, fontSize: 13, color: c.text, fontWeight: 600 }}>{report.priority_niche || "—"}</div>
+            </div>
+            <div>
+              <div style={{ ...sys, fontSize: 10, color: c.muted, marginBottom: 6 }}>Summary</div>
+              <div style={{ ...sys, fontSize: 11, color: c.muted, lineHeight: 1.6 }}>{report.summary?.slice(0, 200) || "No summary yet."}</div>
+            </div>
+          </div>
+        ) : (
+          <EmptyState text="No report yet — run the pipeline to generate Snow's first analysis." />
+        )}
+      </div>
+
+      {/* Memory preview */}
+      <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 12, padding: "16px 18px" }}>
+        <SectionLabel>Memory Preview</SectionLabel>
+        {memory.slice(0, 5).length === 0
+          ? <EmptyState text="No memory entries yet." />
+          : memory.slice(0, 5).map(m => (
+            <div key={m.id} style={{ display: "flex", gap: 10, alignItems: "flex-start", paddingBottom: 10, marginBottom: 10, borderBottom: `1px solid ${c.faint}` }}>
+              <MemoryCategoryBadge category={m.category} />
+              <div style={{ ...sys, fontSize: 11, color: c.muted, flex: 1, lineHeight: 1.5 }}>{m.observation}</div>
+              <div style={{ ...mono, fontSize: 9, color: "#333", whiteSpace: "nowrap" }}>{m.created_at?.slice(0, 10) || ""}</div>
+            </div>
+          ))
+        }
+      </div>
+
+    </div>
+  );
+}
+
+// ── Research page ─────────────────────────────────────────
+function ResearchPage({ proposals, decide, activeAgent }) {
+  const pending = proposals.filter(p => p.status === "pending");
+  const decided = proposals.filter(p => p.status !== "pending");
+  const state = activeAgent === "Research Agent" ? "running" : pending.length > 0 ? "waiting" : "idle";
+
+  return (
+    <div>
+      <AgentHeader name="Research Agent" model="claude-haiku-4.5" state={state} subtitle="Etsy trend scanner · Niche researcher" />
+      <TerminalLine text={`Scanning Etsy trends — ${pending.length} proposal${pending.length !== 1 ? "s" : ""} pending review`} color={state === "running" ? c.green : c.muted} />
+      <div style={{ padding: "20px 24px" }}>
+
+        {pending.length > 0 && (
+          <>
+            <SectionLabel>Awaiting Approval ({pending.length})</SectionLabel>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 24 }}>
+              {pending.map(pr => (
+                <div key={pr.id} style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 10, padding: "12px 14px" }}>
+                  <div style={{ ...sys, fontSize: 12, fontWeight: 500, color: c.text, marginBottom: 4 }}>{pr.title}</div>
+                  <div style={{ ...mono, fontSize: 10, color: c.muted, marginBottom: 10 }}>{pr.meta}</div>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <Btn variant="approve" onClick={() => decide(pr.id, "approved")} style={{ flex: 1 }}>Approve</Btn>
+                    <Btn variant="reject" onClick={() => decide(pr.id, "rejected")}>Reject</Btn>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {decided.length > 0 && (
+          <>
+            <SectionLabel>Decided</SectionLabel>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {decided.map(pr => (
+                <div key={pr.id} style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 10, padding: "10px 14px", opacity: 0.5, display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ ...mono, fontSize: 9, color: pr.status === "approved" ? c.green : c.red, width: 52 }}>{pr.status === "approved" ? "approved" : "rejected"}</div>
+                  <div style={{ ...sys, fontSize: 12, color: c.muted, flex: 1 }}>{pr.title}</div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {proposals.length === 0 && <EmptyState text="No proposals — launch the pipeline to scan trends." />}
+      </div>
+    </div>
+  );
+}
+
+// ── Design page ───────────────────────────────────────────
+function DesignPage({ designs, decideDesign, activeAgent, onSelectDesign }) {
+  const state = activeAgent === "Design Agent" ? "running" : designs.length > 0 ? "waiting" : "idle";
+
+  return (
+    <div>
+      <AgentHeader name="Design Agent" model="flux-schnell · replicate" state={state} catColor="#fbbf24" subtitle="Image generator · Art director" />
+      <TerminalLine text={`${designs.length} design${designs.length !== 1 ? "s" : ""} awaiting review`} color={state === "running" ? c.amber : c.muted} />
+      <div style={{ padding: "20px 24px" }}>
+        {designs.length === 0
+          ? <EmptyState text="No designs ready — approve proposals to trigger image generation." />
+          : (
+            <>
+              <SectionLabel>Designs Awaiting Review ({designs.length})</SectionLabel>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
+                {designs.map(d => (
+                  <div key={d.id} style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 12, overflow: "hidden" }}>
+                    {d.image_url && (
+                      <div style={{ position: "relative" }}>
+                        <img src={d.image_url} alt={d.title} style={{ width: "100%", height: 160, objectFit: "cover", display: "block" }} />
+                        <button onClick={() => onSelectDesign(d)} style={{ position: "absolute", top: 7, right: 7, background: "rgba(0,0,0,0.7)", color: c.text, border: `1px solid ${c.border}`, borderRadius: 6, padding: "3px 8px", fontSize: 10, cursor: "pointer", ...mono }}>expand</button>
+                      </div>
+                    )}
+                    <div style={{ padding: "10px 12px" }}>
+                      <div style={{ ...sys, fontSize: 11, color: c.text, marginBottom: 8, lineHeight: 1.4 }}>{d.title?.slice(0, 56)}{d.title?.length > 56 ? "…" : ""}</div>
+                      <div style={{ display: "flex", gap: 5 }}>
+                        <Btn variant="approve" onClick={() => decideDesign(d.id, "design_approved")} style={{ flex: 1, padding: "5px 8px" }}>Approve</Btn>
+                        <Btn variant="reject" onClick={() => decideDesign(d.id, "design_rejected")} style={{ flex: 1, padding: "5px 8px" }}>Redo</Btn>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )
+        }
+      </div>
+    </div>
+  );
+}
+
+// ── Listing page ──────────────────────────────────────────
+function ListingPage({ listings, activeAgent, onSelectListing }) {
+  const state = activeAgent === "Listing Agent" ? "running" : listings.length > 0 ? "waiting" : "idle";
+
+  return (
+    <div>
+      <AgentHeader name="Listing Agent" model="claude-haiku-4.5" state={state} catColor={c.green} subtitle="SEO writer · Etsy uploader" />
+      <TerminalLine text={`${listings.length} listing${listings.length !== 1 ? "s" : ""} ready to upload`} color={state === "running" ? c.green : c.muted} />
+      <div style={{ padding: "20px 24px" }}>
+        {listings.length === 0
+          ? <EmptyState text="No listings ready — approve designs to generate listings." />
+          : (
+            <>
+              <SectionLabel>Ready to Upload ({listings.length})</SectionLabel>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
+                {listings.map(l => (
+                  <div key={l.id} onClick={() => onSelectListing(l)} style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 12, overflow: "hidden", cursor: "pointer", transition: "border-color 0.15s" }}
+                    onMouseEnter={e => e.currentTarget.style.borderColor = c.glow}
+                    onMouseLeave={e => e.currentTarget.style.borderColor = c.border}>
+                    {l.image_url && (
+                      <div style={{ position: "relative" }}>
+                        <img src={l.image_url} alt={l.title} style={{ width: "100%", height: 150, objectFit: "cover", display: "block" }} />
+                        <div style={{ position: "absolute", bottom: 6, left: 10 }}>
+                          <span style={{ ...mono, fontSize: 13, fontWeight: 700, color: c.text, background: "rgba(0,0,0,0.7)", padding: "2px 6px", borderRadius: 4 }}>{l.price}</span>
+                        </div>
+                      </div>
+                    )}
+                    <div style={{ padding: "10px 12px" }}>
+                      <div style={{ ...sys, fontSize: 11, color: c.text, marginBottom: 5, lineHeight: 1.4 }}>{l.title?.slice(0, 54)}{l.title?.length > 54 ? "…" : ""}</div>
+                      <div style={{ ...mono, fontSize: 9, color: c.muted, marginBottom: 8 }}>{l.tags?.split(",").length || 0} tags · click to preview</div>
+                      <Btn onClick={e => e.stopPropagation()} variant="primary" style={{ width: "100%", textAlign: "center" }}>Upload to Etsy</Btn>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )
+        }
+      </div>
+    </div>
+  );
+}
+
+// ── Feedback page ─────────────────────────────────────────
+function FeedbackPage() {
+  return (
+    <div>
+      <AgentHeader name="Feedback Agent" model="claude-haiku-4.5" state="idle" catColor="#a78bfa" subtitle="Performance tracker · Weekly recap" />
+      <TerminalLine text="Awaiting listing data — no active tracking" />
+      <div style={{ padding: "20px 24px" }}>
+        <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 12, padding: "14px 16px", marginBottom: 14 }}>
+          <div style={{ ...mono, fontSize: 10, color: c.muted }}>Next recap in <span style={{ color: c.text }}>6 days</span></div>
+          <div style={{ ...mono, fontSize: 10, color: c.muted, marginTop: 4 }}>0 listings tracked</div>
+        </div>
+        <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 12, padding: "60px 24px", textAlign: "center" }}>
+          <div style={{ ...sys, fontSize: 12, color: c.muted }}>Performance charts coming soon</div>
+          <div style={{ ...mono, fontSize: 10, color: "#333", marginTop: 6 }}>Requires active Etsy listings</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Pipeline Logs page ────────────────────────────────────
+function LogsPage({ logs }) {
+  const statusStyle = (s) => {
+    if (s === "success") return { color: c.green, background: c.greenDim, border: `1px solid ${c.green}33` };
+    if (s === "failed") return { color: c.red, background: c.redDim, border: `1px solid ${c.red}33` };
+    return { color: c.amber, background: c.amberDim, border: `1px solid ${c.amber}33` };
+  };
+
+  return (
+    <div style={{ padding: "24px 28px" }}>
+      <div style={{ ...sys, fontSize: 16, fontWeight: 600, color: c.text, marginBottom: 6 }}>Pipeline Logs</div>
+      <div style={{ ...mono, fontSize: 10, color: c.muted, marginBottom: 20 }}>All pipeline runs, newest first</div>
+
+      {logs.length === 0
+        ? <EmptyState text="No pipeline runs recorded yet." />
+        : (
+          <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 12, overflow: "hidden" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1.8fr 1fr 0.8fr 0.8fr 0.8fr 0.8fr", gap: 0, padding: "8px 16px", borderBottom: `1px solid ${c.border}` }}>
+              {["Date", "Duration", "Proposals", "Designs", "Listings", "Status"].map(h => (
+                <div key={h} style={{ ...mono, fontSize: 9, color: c.muted, letterSpacing: 1, textTransform: "uppercase" }}>{h}</div>
+              ))}
+            </div>
+            {logs.map((log, i) => (
+              <div key={log.id} style={{ display: "grid", gridTemplateColumns: "1.8fr 1fr 0.8fr 0.8fr 0.8fr 0.8fr", gap: 0, padding: "10px 16px", borderBottom: i < logs.length - 1 ? `1px solid ${c.faint}` : "none", alignItems: "center" }}>
+                <div style={{ ...mono, fontSize: 11, color: c.text }}>{log.date}</div>
+                <div style={{ ...mono, fontSize: 11, color: c.muted }}>{log.duration || "—"}</div>
+                <div style={{ ...mono, fontSize: 11, color: c.muted }}>{log.proposals}</div>
+                <div style={{ ...mono, fontSize: 11, color: c.muted }}>{log.designs}</div>
+                <div style={{ ...mono, fontSize: 11, color: c.muted }}>{log.listings}</div>
+                <span style={{ ...mono, fontSize: 9, padding: "2px 8px", borderRadius: 4, letterSpacing: 0.5, textTransform: "uppercase", display: "inline-block", width: "fit-content", ...statusStyle(log.status) }}>{log.status}</span>
+              </div>
+            ))}
+          </div>
+        )
+      }
+    </div>
+  );
+}
+
+// ── Memory category badge ─────────────────────────────────
+function MemoryCategoryBadge({ category }) {
+  const styles = {
+    approved: { color: c.text, background: "#1a1a1a", border: `1px solid ${c.border}` },
+    rejected: { color: c.muted, background: "#151515", border: `1px solid ${c.faint}` },
+    trend: { color: "#888", background: "#141414", border: `1px solid ${c.faint}` },
+    avoid: { color: "#c84040", background: "#150a0a", border: "1px solid #2a1010" },
+    general: { color: c.muted, background: c.faint, border: `1px solid ${c.border}` },
+  };
+  const s = styles[category] || styles.general;
+  return (
+    <span style={{ ...mono, fontSize: 8, padding: "2px 7px", borderRadius: 4, letterSpacing: 0.5, textTransform: "uppercase", flexShrink: 0, ...s }}>{category}</span>
+  );
+}
+
+// ── Snow Memory page ──────────────────────────────────────
+function MemoryPage({ memory }) {
+  const [filter, setFilter] = useState("all");
+  const categories = ["all", ...Array.from(new Set(memory.map(m => m.category)))];
+  const shown = filter === "all" ? memory : memory.filter(m => m.category === filter);
+
+  return (
+    <div style={{ padding: "24px 28px" }}>
+      <div style={{ ...sys, fontSize: 16, fontWeight: 600, color: c.text, marginBottom: 6 }}>Snow Memory</div>
+      <div style={{ ...mono, fontSize: 10, color: c.muted, marginBottom: 20 }}>Observations and decisions stored across pipeline runs</div>
+
+      <div style={{ display: "flex", gap: 6, marginBottom: 18, flexWrap: "wrap" }}>
+        {categories.map(cat => (
+          <button key={cat} onClick={() => setFilter(cat)} style={{
+            ...mono, fontSize: 9, padding: "4px 10px", borderRadius: 6, cursor: "pointer",
+            background: filter === cat ? c.glow : c.faint,
+            color: filter === cat ? c.text : c.muted,
+            border: `1px solid ${filter === cat ? c.border : c.faint}`,
+            textTransform: "uppercase", letterSpacing: 0.6,
+          }}>{cat}</button>
+        ))}
+      </div>
+
+      {shown.length === 0
+        ? <EmptyState text="No memory entries." />
+        : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {shown.map(m => (
+              <div key={m.id} style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 10, padding: "12px 14px", display: "flex", gap: 12, alignItems: "flex-start" }}>
+                <MemoryCategoryBadge category={m.category} />
+                <div style={{ ...sys, fontSize: 12, color: c.muted, flex: 1, lineHeight: 1.6 }}>{m.observation}</div>
+                <div style={{ ...mono, fontSize: 9, color: "#333", whiteSpace: "nowrap" }}>{m.created_at?.slice(0, 10) || ""}</div>
+              </div>
+            ))}
+          </div>
+        )
+      }
+    </div>
+  );
+}
+
+// ── Design modal ──────────────────────────────────────────
+function DesignModal({ design, onClose, decideDesign }) {
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, cursor: "pointer" }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 14, overflow: "hidden", maxWidth: 540, width: "92%", cursor: "default" }}>
+        <img src={design.image_url} alt={design.title} style={{ width: "100%", maxHeight: 460, objectFit: "contain", background: "#0d0d0d", display: "block" }} />
+        <div style={{ padding: "14px 16px", borderTop: `1px solid ${c.border}` }}>
+          <div style={{ ...sys, fontSize: 13, fontWeight: 600, color: c.text, marginBottom: 12 }}>{design.title}</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <Btn variant="approve" onClick={() => { decideDesign(design.id, "design_approved"); onClose(); }} style={{ flex: 1, padding: "7px" }}>Approve</Btn>
+            <Btn variant="reject" onClick={() => { decideDesign(design.id, "design_rejected"); onClose(); }} style={{ flex: 1, padding: "7px" }}>Redo</Btn>
+            <Btn onClick={onClose} style={{ padding: "7px 14px" }}>Close</Btn>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Listing modal ─────────────────────────────────────────
+function ListingModal({ listing, onClose }) {
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, cursor: "pointer" }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 14, overflow: "hidden", maxWidth: 620, width: "92%", cursor: "default", display: "grid", gridTemplateColumns: "1fr 1fr" }}>
+        {listing.image_url && (
+          <img src={listing.image_url} alt={listing.title} style={{ width: "100%", height: "100%", minHeight: 300, objectFit: "cover", display: "block" }} />
+        )}
+        <div style={{ padding: "20px 18px", overflowY: "auto", maxHeight: 460 }}>
+          <div style={{ ...sys, fontSize: 13, fontWeight: 600, color: c.text, marginBottom: 6, lineHeight: 1.4 }}>{listing.title}</div>
+          <div style={{ ...mono, fontSize: 16, color: c.text, fontWeight: 700, marginBottom: 14 }}>{listing.price}</div>
+          <div style={{ ...sys, fontSize: 10, color: c.muted, marginBottom: 4 }}>Description</div>
+          <div style={{ ...sys, fontSize: 11, color: c.muted, lineHeight: 1.7, marginBottom: 12 }}>{listing.description?.slice(0, 300)}{listing.description?.length > 300 ? "…" : ""}</div>
+          <div style={{ ...sys, fontSize: 10, color: c.muted, marginBottom: 4 }}>Tags</div>
+          <div style={{ ...mono, fontSize: 9, color: "#444", lineHeight: 1.9, marginBottom: 16 }}>{listing.tags}</div>
+          <Btn variant="primary" style={{ width: "100%", textAlign: "center", padding: "8px", marginBottom: 6 }}>Upload to Etsy</Btn>
+          <Btn onClick={onClose} style={{ width: "100%", textAlign: "center", padding: "7px" }}>Close</Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Root ──────────────────────────────────────────────────
 export default function Dashboard() {
   const { proposals, decide, clearCompleted } = useProposals();
   const { designs, decideDesign } = useDesigns();
   const { listings } = useReadyListings();
   const { report } = useSnowReport();
   const { status: pipelineStatus } = usePipelineStatus();
+  const { logs } = usePipelineLogs();
+  const { memory } = useSnowMemory();
 
+  const [activePage, setActivePage] = useState("overview");
   const [keywords, setKeywords] = useState("");
-  const [launching, setLaunching] = useState(false);
+  const [launchState, setLaunchState] = useState("idle"); // idle | launching | done
   const [selectedDesign, setSelectedDesign] = useState(null);
   const [selectedListing, setSelectedListing] = useState(null);
-  const [activityOpen, setActivityOpen] = useState(false);
-  const [reportOpen, setReportOpen] = useState(false);
 
-  const pending = proposals.filter(q => q.status === "pending");
-  const isRunning = pipelineStatus?.running;
   const activeAgent = pipelineStatus?.active_agent;
+  const isRunning = pipelineStatus?.running;
 
-  const launch = async () => {
-    setLaunching(true);
-    try {
-      await fetch(`http://localhost:8000/launch?keywords=${encodeURIComponent(keywords)}`, { method: "POST" });
-    } catch (e) { console.error(e); }
-    setTimeout(() => setLaunching(false), 4000);
+  const agentPageState = (agentName) => {
+    if (activeAgent === agentName && isRunning) return "running";
+    return "idle";
   };
 
+  const agentStates = {
+    overview: isRunning ? "running" : "idle",
+    research: agentPageState("Research Agent"),
+    design: agentPageState("Design Agent"),
+    listing: agentPageState("Listing Agent"),
+    feedback: agentPageState("Feedback Agent"),
+    strategy: "idle",
+    logs: "idle",
+    memory: "idle",
+  };
+
+  const counts = {
+    research: proposals.filter(p => p.status === "pending").length,
+    design: designs.length,
+    listing: listings.length,
+  };
+
+  const launch = async () => {
+    setLaunchState("launching");
+    try {
+      await fetch(`http://localhost:8000/launch?keywords=${encodeURIComponent(keywords)}`, { method: "POST" });
+    } catch (e) {}
+    setLaunchState("done");
+    setTimeout(() => setLaunchState("idle"), 3500);
+  };
+
+  const totalStats = [
+    { label: "Listings", value: listings.length },
+    { label: "Views", value: 0 },
+    { label: "Sales", value: 0 },
+  ];
+
   return (
-    <div style={{ background: p.bg, minHeight: "100vh", fontFamily: "'Segoe UI', Georgia, sans-serif", color: p.text, padding: "18px 22px" }}>
+    <div style={{ display: "flex", height: "100vh", background: c.bg, color: c.text, overflow: "hidden" }}>
 
-      {/* ── Header ── */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18, paddingBottom: 14, borderBottom: `1px solid ${p.border}` }}>
-        <div>
-          <div style={{ fontSize: 9, letterSpacing: 3, textTransform: "uppercase", color: p.muted, marginBottom: 3 }}>Agent Operations Center</div>
-          <div style={{ fontSize: 17, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: p.text }}>
-            Project<span style={{ color: p.accent }}>S</span>now
-          </div>
-        </div>
+      <Sidebar active={activePage} setActive={setActivePage} agentStates={agentStates} counts={counts} />
 
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <input value={keywords} onChange={e => setKeywords(e.target.value)}
-            placeholder="Keywords for Snow... (japandi, wabi sabi...)"
-            style={{ background: p.card, border: `1px solid ${p.border}`, borderRadius: 8, padding: "8px 13px", color: p.text, fontSize: 11, width: 260, outline: "none", fontFamily: "monospace" }} />
-          <button onClick={launch} style={{ background: launching ? p.greenDim : p.accentDim, color: launching ? p.green : p.accent, border: `1px solid ${launching ? p.green : p.accent}44`, borderRadius: 8, padding: "8px 18px", fontSize: 11, fontWeight: 700, cursor: "pointer", transition: "all 0.3s", letterSpacing: 0.5 }}>
-            {launching ? "✓ Launched!" : "❄️ Launch Pipeline"}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+
+        {/* Top header bar */}
+        <div style={{ height: 52, borderBottom: `1px solid ${c.border}`, display: "flex", alignItems: "center", gap: 12, padding: "0 20px", flexShrink: 0, background: c.card }}>
+          <div style={{ ...sys, fontSize: 13, fontWeight: 700, color: c.text, letterSpacing: 0.3, marginRight: 4 }}>ProjectSnow</div>
+          <div style={{ width: 1, height: 18, background: c.border }} />
+
+          {/* Launch input */}
+          <input
+            value={keywords}
+            onChange={e => setKeywords(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && launchState === "idle" && launch()}
+            placeholder="Keywords for Snow..."
+            style={{ ...mono, background: "transparent", border: `1px solid ${c.border}`, borderRadius: 6, padding: "5px 10px", color: c.text, fontSize: 10, width: 220, outline: "none", caretColor: c.text }}
+          />
+          <button onClick={launch} disabled={launchState !== "idle"} style={{
+            ...mono, fontSize: 10, fontWeight: 600, padding: "5px 14px", borderRadius: 6, cursor: launchState === "idle" ? "pointer" : "default",
+            background: launchState === "done" ? c.greenDim : c.faint,
+            color: launchState === "done" ? c.green : launchState === "launching" ? c.muted : c.text,
+            border: `1px solid ${launchState === "done" ? c.green + "44" : c.border}`,
+            transition: "all 0.2s",
+          }}>
+            {launchState === "launching" ? "Launching..." : launchState === "done" ? "Launched" : "Launch Pipeline"}
           </button>
-          <button onClick={clearCompleted} style={{ background: "#2a1010", color: "#f87171", border: "1px solid #4a2020", borderRadius: 8, padding: "8px 14px", fontSize: 11, fontWeight: 700, cursor: "pointer", letterSpacing: 0.5 }}>
-            Clear
-          </button>
+
           {isRunning && (
-            <div style={{ fontSize: 10, color: p.amber, fontFamily: "monospace", display: "flex", alignItems: "center", gap: 5 }}>
-              <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: p.amber, animation: "pulse 1.5s infinite" }} />
-              {activeAgent} running...
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <StatusDot state="running" />
+              <span style={{ ...mono, fontSize: 10, color: c.muted }}>{activeAgent}</span>
             </div>
           )}
-        </div>
 
-        <div style={{ display: "flex", gap: 20 }}>
-          {[["0", "Listings"], ["0", "Views"], ["0", "Sales"]].map(([v, l]) => (
-            <div key={l} style={{ textAlign: "right" }}>
-              <div style={{ fontSize: 19, fontWeight: 700, color: p.text, fontFamily: "monospace" }}>{v}</div>
-              <div style={{ fontSize: 9, letterSpacing: 1.5, textTransform: "uppercase", color: p.muted }}>{l}</div>
+          <Btn onClick={clearCompleted} style={{ marginLeft: 4, padding: "4px 10px", color: "#c84040", borderColor: "#2a1010" }}>Clear</Btn>
+
+          <div style={{ flex: 1 }} />
+
+          {totalStats.map(s => (
+            <div key={s.label} style={{ textAlign: "right", paddingLeft: 16, borderLeft: `1px solid ${c.border}` }}>
+              <div style={{ ...mono, fontSize: 16, fontWeight: 700, color: c.text, lineHeight: 1 }}>{s.value}</div>
+              <div style={{ ...sys, fontSize: 9, color: c.muted, marginTop: 2, letterSpacing: 0.5 }}>{s.label}</div>
             </div>
           ))}
         </div>
-      </div>
 
-      {/* ── Snow Orchestrator ── */}
-      <div style={{ background: p.card, border: `1px solid ${p.accent}22`, borderRadius: 14, padding: "14px 18px", marginBottom: 14, display: "flex", alignItems: "center", gap: 16, position: "relative", overflow: "hidden" }}>
-        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 1, background: `linear-gradient(90deg, transparent, ${p.accent}55, transparent)` }} />
-        <div style={{ width: 56, height: 56, borderRadius: 14, background: p.accentDim, border: `1px solid ${p.accent}33`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <SleepingCat color="#e8d4b8" size={44} />
-        </div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 9, letterSpacing: 2, textTransform: "uppercase", color: p.accent, marginBottom: 2 }}>Orchestrator</div>
-          <div style={{ fontSize: 15, fontWeight: 800, color: p.text, marginBottom: 1 }}>Snow</div>
-          <div style={{ fontSize: 10, color: p.muted, fontFamily: "monospace" }}>claude-opus-4.6 · supervising all agents</div>
-        </div>
-        <div style={{ fontSize: 10, color: p.muted, lineHeight: 1.9, textAlign: "center", padding: "0 20px", borderLeft: `1px solid ${p.border}`, borderRight: `1px solid ${p.border}` }}>
-          Reviews proposals<br />Directs design style<br />Filters off-brand ideas
-        </div>
-        <div style={{ textAlign: "right" }}>
-          <Pill label="● Supervising" color={p.accent} bg={p.accentDim} />
-          {report && <div style={{ fontSize: 10, color: p.muted, marginTop: 6, fontFamily: "monospace" }}>Last report: {report.created_at || "—"}</div>}
-        </div>
-      </div>
-
-      {/* ── Main Grid: Research | Design ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 12, marginBottom: 12 }}>
-
-        {/* Research Agent */}
-        <div style={{ background: p.card, border: activeAgent === "Research Agent" ? `1px solid ${p.blue}55` : `1px solid ${p.border}`, borderRadius: 14, overflow: "hidden", transition: "border-color 0.4s" }}>
-          <CardHeader
-            cat={<AlertCat color={p.blue} size={30} active={activeAgent === "Research Agent"} />}
-            name="Research Agent" model="haiku-4.5"
-            statusLabel={activeAgent === "Research Agent" ? "Running" : "Idle"}
-            statusColor={activeAgent === "Research Agent" ? p.blue : p.muted}
-            statusBg={p.blueDim}
-            active={activeAgent === "Research Agent"}
-          />
-          <Terminal
-            line1={`→ Scanning Etsy trends...`}
-            line2={`${pending.length} proposals queued`}
-            color={p.blue}
-          />
-          <div style={{ padding: 12 }}>
-            <div style={{ fontSize: 9, letterSpacing: 1.5, textTransform: "uppercase", color: p.muted, marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span>Awaiting approval</span>
-              {pending.length > 0 && <span style={{ background: "#8b2020", color: "#ffaaaa", fontSize: 9, borderRadius: 20, padding: "1px 7px" }}>{pending.length}</span>}
+        {/* Page content */}
+        <div style={{ flex: 1, overflowY: "auto" }}>
+          {activePage === "overview" && (
+            <OverviewPage report={report} pipelineStatus={pipelineStatus} proposals={proposals} designs={designs} listings={listings} memory={memory} />
+          )}
+          {activePage === "research" && (
+            <ResearchPage proposals={proposals} decide={decide} activeAgent={activeAgent} />
+          )}
+          {activePage === "design" && (
+            <DesignPage designs={designs} decideDesign={decideDesign} activeAgent={activeAgent} onSelectDesign={setSelectedDesign} />
+          )}
+          {activePage === "listing" && (
+            <ListingPage listings={listings} activeAgent={activeAgent} onSelectListing={setSelectedListing} />
+          )}
+          {activePage === "feedback" && <FeedbackPage />}
+          {activePage === "logs" && <LogsPage logs={logs} />}
+          {activePage === "memory" && <MemoryPage memory={memory} />}
+          {activePage === "strategy" && (
+            <div style={{ padding: "24px 28px" }}>
+              <div style={{ ...sys, fontSize: 16, fontWeight: 600, color: c.text, marginBottom: 6 }}>Strategy Agent</div>
+              <div style={{ ...mono, fontSize: 10, color: c.muted }}>Coming soon</div>
             </div>
-            {pending.length === 0 && <div style={{ fontSize: 11, color: p.faint, textAlign: "center", padding: "14px 0" }}>No pending proposals</div>}
-            {proposals.map(pr => (
-              <div key={pr.id} style={{ background: p.surface, border: pr.status === "approved" ? `1px solid ${p.green}44` : `1px solid ${p.faint}`, borderRadius: 9, padding: "9px 11px", marginBottom: 6, opacity: pr.status === "rejected" ? 0.4 : 1, transition: "all 0.3s" }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: p.text, marginBottom: 2, lineHeight: 1.4 }}>{pr.title}</div>
-                <div style={{ fontSize: 10, color: p.muted, fontFamily: "monospace", marginBottom: pr.status === "pending" ? 7 : 0 }}>{pr.meta}</div>
-                {pr.status === "pending" && (
-                  <div style={{ display: "flex", gap: 5 }}>
-                    <button onClick={() => decide(pr.id, "approved")} style={{ flex: 1, fontSize: 10, padding: "4px", borderRadius: 6, cursor: "pointer", fontWeight: 700, background: p.greenDim, color: p.green, border: `1px solid ${p.green}44` }}>✓ Approve</button>
-                    <button onClick={() => decide(pr.id, "rejected")} style={{ fontSize: 10, padding: "4px 10px", borderRadius: 6, cursor: "pointer", fontWeight: 700, background: "#2a1010", color: "#f87171", border: "1px solid #4a2020" }}>✗</button>
-                  </div>
-                )}
-                {pr.status !== "pending" && (
-                  <div style={{ fontSize: 10, color: pr.status === "approved" ? p.green : "#f87171", fontFamily: "monospace" }}>
-                    {pr.status === "approved" ? "✓ Approved" : "✗ Rejected"}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Design Agent */}
-        <div style={{ background: p.card, border: activeAgent === "Design Agent" ? `1px solid ${p.amber}55` : `1px solid ${p.border}`, borderRadius: 14, overflow: "hidden", transition: "border-color 0.4s" }}>
-          <CardHeader
-            cat={<ArtistCat color={p.amber} size={30} active={activeAgent === "Design Agent"} />}
-            name="Design Agent" model="flux-schnell · replicate"
-            statusLabel={activeAgent === "Design Agent" ? "Running" : designs.length > 0 ? "Review" : "Waiting"}
-            statusColor={activeAgent === "Design Agent" ? p.amber : designs.length > 0 ? p.accent : p.muted}
-            statusBg={p.amberDim}
-            active={activeAgent === "Design Agent"}
-          />
-          <Terminal
-            line1="⏳ Awaiting approved proposals..."
-            line2={`${designs.length} design(s) ready for review`}
-            color={p.amber}
-          />
-          <div style={{ padding: 12 }}>
-            <div style={{ fontSize: 9, letterSpacing: 1.5, textTransform: "uppercase", color: p.muted, marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span>Designs awaiting review</span>
-              {designs.length > 0 && <span style={{ background: "#6b4a10", color: "#fbbf24", fontSize: 9, borderRadius: 20, padding: "1px 7px" }}>{designs.length}</span>}
-            </div>
-            {designs.length === 0 && <div style={{ fontSize: 11, color: p.faint, textAlign: "center", padding: "20px 0" }}>No designs ready yet</div>}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 10 }}>
-              {designs.map(d => (
-                <div key={d.id} style={{ background: p.surface, border: `1px solid ${p.faint}`, borderRadius: 10, overflow: "hidden" }}>
-                  {d.image_url && (
-                    <div style={{ position: "relative" }}>
-                      <img src={d.image_url} alt={d.title} style={{ width: "100%", height: 110, objectFit: "cover", display: "block" }} />
-                      <button onClick={() => setSelectedDesign(d)} style={{ position: "absolute", top: 5, right: 5, background: "rgba(0,0,0,0.55)", color: "#fff", border: "none", borderRadius: 5, padding: "2px 7px", fontSize: 10, cursor: "pointer" }}>⛶</button>
-                    </div>
-                  )}
-                  <div style={{ padding: "8px 9px" }}>
-                    <div style={{ fontSize: 10, fontWeight: 600, color: p.text, marginBottom: 6, lineHeight: 1.3 }}>{d.title?.slice(0, 48)}{d.title?.length > 48 ? "…" : ""}</div>
-                    <div style={{ display: "flex", gap: 4 }}>
-                      <button onClick={() => decideDesign(d.id, "design_approved")} style={{ flex: 1, fontSize: 9, padding: "4px", borderRadius: 5, cursor: "pointer", fontWeight: 700, background: p.greenDim, color: p.green, border: `1px solid ${p.green}44` }}>✓</button>
-                      <button onClick={() => decideDesign(d.id, "design_rejected")} style={{ flex: 1, fontSize: 9, padding: "4px", borderRadius: 5, cursor: "pointer", fontWeight: 700, background: "#2a1010", color: "#f87171", border: "1px solid #4a2020" }}>✗ Redo</button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-      </div>
-
-      {/* ── Bottom Grid: Listing | Feedback + Activity ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 12, marginBottom: 12 }}>
-
-        {/* Listing Agent */}
-        <div style={{ background: p.card, border: activeAgent === "Listing Agent" ? `1px solid ${p.green}55` : `1px solid ${p.border}`, borderRadius: 14, overflow: "hidden", transition: "border-color 0.4s" }}>
-          <CardHeader
-            cat={<ProudCat color={p.green} size={30} active={activeAgent === "Listing Agent"} />}
-            name="Listing Agent" model={`haiku-4.5 · ${listings.length} ready`}
-            statusLabel={activeAgent === "Listing Agent" ? "Running" : listings.length > 0 ? `${listings.length} Ready` : "Idle"}
-            statusColor={activeAgent === "Listing Agent" ? p.green : listings.length > 0 ? p.accent : p.muted}
-            statusBg={p.greenDim}
-            active={activeAgent === "Listing Agent"}
-          />
-          <Terminal
-            line1="→ Writes SEO titles · descriptions · tags"
-            line2={`${listings.length} listing(s) ready to upload to Etsy`}
-            color={p.green}
-          />
-          <div style={{ padding: 12 }}>
-            {listings.length === 0 && <div style={{ fontSize: 11, color: p.faint, textAlign: "center", padding: "20px 0" }}>No listings ready yet</div>}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))", gap: 10 }}>
-              {listings.map(l => (
-                <div key={l.id} onClick={() => setSelectedListing(l)} style={{ background: p.surface, border: `1px solid ${p.accent}22`, borderRadius: 10, overflow: "hidden", cursor: "pointer", transition: "border-color 0.2s" }}
-                  onMouseEnter={e => e.currentTarget.style.borderColor = `${p.accent}55`}
-                  onMouseLeave={e => e.currentTarget.style.borderColor = `${p.accent}22`}>
-                  {l.image_url && (
-                    <div style={{ position: "relative" }}>
-                      <img src={l.image_url} alt={l.title} style={{ width: "100%", height: 110, objectFit: "cover", display: "block" }} />
-                      <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "50%", background: "linear-gradient(transparent, rgba(10,8,5,0.8))" }} />
-                      <div style={{ position: "absolute", bottom: 6, left: 8 }}>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: p.accent, fontFamily: "monospace" }}>{l.price}</span>
-                      </div>
-                    </div>
-                  )}
-                  <div style={{ padding: "8px 10px" }}>
-                    <div style={{ fontSize: 10, fontWeight: 600, color: p.text, marginBottom: 6, lineHeight: 1.3 }}>{l.title?.slice(0, 50)}{l.title?.length > 50 ? "…" : ""}</div>
-                    <div style={{ fontSize: 9, color: p.muted, marginBottom: 7, fontFamily: "monospace" }}>{l.tags?.split(",").length || 0} tags · click to preview</div>
-                    <button onClick={e => { e.stopPropagation(); }} style={{ width: "100%", fontSize: 10, padding: "5px", borderRadius: 6, cursor: "pointer", fontWeight: 700, background: p.accentDim, color: p.accent, border: `1px solid ${p.accent}44` }}>
-                      📤 Upload to Etsy
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Right column: Feedback + Activity */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-
-          {/* Feedback Agent */}
-          <div style={{ background: p.card, border: `1px solid ${p.border}`, borderRadius: 14, overflow: "hidden" }}>
-            <CardHeader
-              cat={<WatchfulCat color={p.terra} size={28} />}
-              name="Feedback Agent" model="haiku-4.5"
-              statusLabel="Idle"
-              statusColor={p.muted}
-              statusBg={p.terraDim}
-              active={false}
-            />
-            <div style={{ padding: 12 }}>
-              <div style={{ background: p.surface, borderRadius: 8, padding: "9px 11px", fontFamily: "monospace", fontSize: 10, color: p.muted, lineHeight: 1.9 }}>
-                → Next recap in 6 days<br />
-                <span style={{ color: p.faint }}>0 listings tracked</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Activity — collapsible */}
-          <div style={{ background: p.card, border: `1px solid ${p.border}`, borderRadius: 14, overflow: "hidden" }}>
-            <button onClick={() => setActivityOpen(!activityOpen)}
-              style={{ width: "100%", padding: "12px 14px", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", color: p.muted }}>
-              <span style={{ fontSize: 9, letterSpacing: 2, textTransform: "uppercase", fontWeight: 600 }}>Activity Log</span>
-              <span style={{ fontSize: 14, transition: "transform 0.2s", transform: activityOpen ? "rotate(180deg)" : "none" }}>▾</span>
-            </button>
-            {activityOpen && (
-              <div style={{ padding: "0 12px 12px" }}>
-                {[
-                  { icon: "🔍", text: "3 proposals sent to Airtable", time: "2m" },
-                  { icon: "📤", text: "Listing uploaded", time: "3h" },
-                  { icon: "🎨", text: "3 images generated", time: "3h" },
-                  { icon: "📊", text: "Weekly recap sent", time: "1d" },
-                ].map((a, i) => (
-                  <div key={i} style={{ display: "flex", gap: 8, padding: "5px 0", borderBottom: i < 3 ? `1px solid ${p.faint}` : "none", alignItems: "center" }}>
-                    <span style={{ fontSize: 12 }}>{a.icon}</span>
-                    <span style={{ flex: 1, fontSize: 11, color: p.muted }}>{a.text}</span>
-                    <span style={{ fontSize: 9, color: p.faint, fontFamily: "monospace" }}>{a.time}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
+          )}
         </div>
       </div>
 
-      {/* ── Snow Report — collapsible ── */}
-      <div style={{ background: p.card, border: `1px solid ${p.accent}22`, borderRadius: 14, overflow: "hidden" }}>
-        <button onClick={() => setReportOpen(!reportOpen)}
-          style={{ width: "100%", padding: "13px 18px", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 12, color: p.text }}>
-          <SleepingCat color="#c4a06a" size={24} />
-          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1 }}>Snow's Last Report</span>
-          {report?.priority_niche && <span style={{ fontSize: 10, color: p.muted, fontFamily: "monospace" }}>Priority: {report.priority_niche}</span>}
-          <span style={{ marginLeft: "auto", fontSize: 14, color: p.muted, transition: "transform 0.2s", transform: reportOpen ? "rotate(180deg)" : "none" }}>▾</span>
-        </button>
-        {reportOpen && (
-          <div style={{ padding: "0 18px 16px", display: "grid", gridTemplateColumns: "2fr 1fr", gap: 14 }}>
-            <div>
-              <div style={{ fontSize: 9, letterSpacing: 1.5, textTransform: "uppercase", color: p.muted, marginBottom: 6 }}>Summary</div>
-              <div style={{ fontSize: 12, color: p.text, lineHeight: 1.7, background: p.surface, borderRadius: 8, padding: "10px 12px" }}>
-                {report?.summary || "No report yet — run the pipeline to generate Snow's first report."}
-              </div>
-            </div>
-            <div>
-              <div style={{ fontSize: 9, letterSpacing: 1.5, textTransform: "uppercase", color: p.muted, marginBottom: 6 }}>Design Direction</div>
-              <div style={{ fontSize: 11, color: p.muted, lineHeight: 1.7, background: p.surface, borderRadius: 8, padding: "10px 12px" }}>
-                {report?.design_direction || "Pending first run"}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* ── Design Modal ── */}
       {selectedDesign && (
-        <div onClick={() => setSelectedDesign(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, cursor: "pointer" }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: p.card, border: `1px solid ${p.border}`, borderRadius: 16, overflow: "hidden", maxWidth: 540, width: "90%", cursor: "default" }}>
-            <img src={selectedDesign.image_url} alt={selectedDesign.title} style={{ width: "100%", maxHeight: 460, objectFit: "contain", background: p.surface, display: "block" }} />
-            <div style={{ padding: "14px 16px", borderTop: `1px solid ${p.faint}` }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: p.text, marginBottom: 10 }}>{selectedDesign.title}</div>
-              <div style={{ display: "flex", gap: 7 }}>
-                <button onClick={() => { decideDesign(selectedDesign.id, "design_approved"); setSelectedDesign(null); }} style={{ flex: 1, padding: "8px", borderRadius: 8, cursor: "pointer", fontWeight: 700, fontSize: 12, background: p.greenDim, color: p.green, border: `1px solid ${p.green}44` }}>✓ Approve</button>
-                <button onClick={() => { decideDesign(selectedDesign.id, "design_rejected"); setSelectedDesign(null); }} style={{ flex: 1, padding: "8px", borderRadius: 8, cursor: "pointer", fontWeight: 700, fontSize: 12, background: "#2a1010", color: "#f87171", border: "1px solid #4a2020" }}>✗ Redo</button>
-                <button onClick={() => setSelectedDesign(null)} style={{ padding: "8px 14px", borderRadius: 8, cursor: "pointer", fontSize: 11, background: p.faint, color: p.muted, border: "none" }}>Close</button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <DesignModal design={selectedDesign} onClose={() => setSelectedDesign(null)} decideDesign={decideDesign} />
       )}
-
-      {/* ── Listing Modal ── */}
       {selectedListing && (
-        <div onClick={() => setSelectedListing(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, cursor: "pointer" }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: p.card, border: `1px solid ${p.border}`, borderRadius: 16, overflow: "hidden", maxWidth: 600, width: "90%", cursor: "default", display: "grid", gridTemplateColumns: "1fr 1fr" }}>
-            {selectedListing.image_url && (
-              <img src={selectedListing.image_url} alt={selectedListing.title} style={{ width: "100%", height: "100%", minHeight: 280, objectFit: "cover", display: "block" }} />
-            )}
-            <div style={{ padding: "18px 16px", overflowY: "auto", maxHeight: 420 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: p.text, marginBottom: 5, lineHeight: 1.4 }}>{selectedListing.title}</div>
-              <div style={{ fontSize: 15, color: p.accent, fontFamily: "monospace", fontWeight: 700, marginBottom: 10 }}>{selectedListing.price}</div>
-              <div style={{ fontSize: 10, color: p.muted, lineHeight: 1.7, marginBottom: 8 }}>{selectedListing.description?.slice(0, 220)}...</div>
-              <div style={{ fontSize: 10, color: p.faint, fontFamily: "monospace", marginBottom: 12, lineHeight: 1.6 }}>🏷️ {selectedListing.tags}</div>
-              <button style={{ width: "100%", padding: "9px", borderRadius: 8, cursor: "pointer", fontWeight: 700, fontSize: 12, background: p.accentDim, color: p.accent, border: `1px solid ${p.accent}44`, marginBottom: 6 }}>📤 Upload to Etsy</button>
-              <button onClick={() => setSelectedListing(null)} style={{ width: "100%", padding: "7px", borderRadius: 8, cursor: "pointer", fontSize: 11, background: p.faint, color: p.muted, border: "none" }}>Close</button>
-            </div>
-          </div>
-        </div>
+        <ListingModal listing={selectedListing} onClose={() => setSelectedListing(null)} />
       )}
 
-      <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }`}</style>
+      <style>{`
+        * { box-sizing: border-box; }
+        body { margin: 0; background: #0a0a0a; }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #1a1a1a; border-radius: 4px; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        button:focus { outline: none; }
+        input::placeholder { color: #333; }
+      `}</style>
     </div>
   );
 }
