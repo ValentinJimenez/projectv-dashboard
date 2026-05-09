@@ -444,58 +444,144 @@ function AgentLog({ agentName, entries, isActive }) {
 }
 
 // ─── Overview page ────────────────────────────────────────
+const fmtTime = (ts) => {
+  if (!ts) return "";
+  const d = new Date(ts);
+  return isNaN(d) ? "" : d.toTimeString().slice(0, 5);
+};
+
 function SnowChat() {
-  const [input, setInput] = useState("");
+  const [input, setInput]   = useState("");
   const [messages, setMessages] = useState([]);
-  const [sending, setSending] = useState(false);
-  const [confirm, setConfirm] = useState("");
+  const [sending, setSending]   = useState(false);
+  const scrollRef = useRef(null);
+
+  // Poll /messages every 3 seconds
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const res  = await fetch("http://localhost:8000/messages");
+        const data = await res.json();
+        setMessages(data.messages || []);
+      } catch (_) {}
+    };
+    poll();
+    const t = setInterval(poll, 3000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Auto-scroll to bottom on new messages or thinking state
+  useEffect(() => {
+    if (scrollRef.current)
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [messages, sending]);
 
   const send = async () => {
     const msg = input.trim();
-    if (!msg) return;
+    if (!msg || sending) return;
     setSending(true);
     setInput("");
     try {
       await fetch(`http://localhost:8000/telegram?message=${encodeURIComponent(msg)}`);
-      setMessages(prev => [...prev.slice(-4), msg]);
-      setConfirm("Message sent to Snow via Telegram");
-      setTimeout(() => setConfirm(""), 3000);
-    } catch (e) {
-      setConfirm("Failed to send — is the server running?");
-      setTimeout(() => setConfirm(""), 4000);
-    }
-    setSending(false);
+    } catch (_) {}
+    // Keep sending=true until the next poll brings Snow's reply
+    setTimeout(() => setSending(false), 15000);
   };
 
   return (
     <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, overflow: "hidden" }}>
-      <div style={{ padding: "10px 14px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 8 }}>
+      {/* Header */}
+      <div style={{ padding: "10px 14px", borderBottom: `1px solid ${C.border}`,
+        display: "flex", alignItems: "center", gap: 8 }}>
         <LoafCat color={C.active} size={20} />
         <span style={{ ...F, fontSize: 11, color: C.active, letterSpacing: 2 }}>DIRECT LINE — SNOW</span>
+        <span style={{ ...F, fontSize: 9, color: C.muted, marginLeft: "auto", letterSpacing: 1 }}>
+          claude-opus-4.6
+        </span>
       </div>
-      {messages.length > 0 && (
-        <div style={{ padding: "10px 14px 0", maxHeight: 120, overflowY: "auto" }}>
-          {messages.map((m, i) => (
-            <div key={i} style={{ ...F, fontSize: 11, color: C.muted, padding: "4px 0",
-              borderBottom: i < messages.length - 1 ? `1px solid ${C.faint}` : "none" }}>
-              <span style={{ color: "#334433", marginRight: 6 }}>&gt;</span>{m}
+
+      {/* Messages */}
+      <div ref={scrollRef} style={{
+        height: 320, overflowY: "auto", padding: "14px 14px 8px",
+        display: "flex", flexDirection: "column", gap: 12,
+        background: "#060606",
+      }}>
+        {messages.length === 0 && !sending && (
+          <div style={{ ...F, fontSize: 10, color: "#223322", textAlign: "center",
+            marginTop: 100, letterSpacing: 1 }}>
+            NO MESSAGES YET — SAY SOMETHING TO SNOW
+          </div>
+        )}
+
+        {messages.map((m, i) => m.role === "user" ? (
+          /* User bubble — right */
+          <div key={i} style={{ display: "flex", justifyContent: "flex-end",
+            gap: 8, alignItems: "flex-end" }}>
+            <span style={{ ...F, fontSize: 8, color: "#334433", flexShrink: 0 }}>
+              {fmtTime(m.timestamp)}
+            </span>
+            <div>
+              <div style={{ ...F, fontSize: 8, color: C.muted, textAlign: "right",
+                marginBottom: 4, letterSpacing: 1 }}>YOU</div>
+              <div style={{
+                ...F, fontSize: 11, color: C.active,
+                background: "#001a0d", border: `1px solid ${C.dim}`,
+                borderRadius: "6px 6px 2px 6px",
+                padding: "8px 12px", maxWidth: 320, lineHeight: 1.65,
+                wordBreak: "break-word",
+              }}>{m.text}</div>
             </div>
-          ))}
-        </div>
-      )}
-      <div style={{ padding: "10px 14px", display: "flex", gap: 8, alignItems: "center" }}>
-        <input value={input} onChange={e => setInput(e.target.value)}
+          </div>
+        ) : (
+          /* Snow bubble — left */
+          <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+            <div style={{ flexShrink: 0, marginTop: 18 }}>
+              <LoafCat color={C.active} size={20} />
+            </div>
+            <div>
+              <div style={{ ...F, fontSize: 8, color: C.muted, marginBottom: 4, letterSpacing: 1 }}>
+                SNOW <span style={{ color: "#334433" }}>{fmtTime(m.timestamp)}</span>
+              </div>
+              <div style={{
+                ...F, fontSize: 11, color: C.text,
+                background: "#0a0a0a", border: `1px solid ${C.border}`,
+                borderRadius: "6px 6px 6px 2px",
+                padding: "9px 13px", maxWidth: 400, lineHeight: 1.75,
+                wordBreak: "break-word",
+                boxShadow: C.glow,
+              }}>{m.text}</div>
+            </div>
+          </div>
+        ))}
+
+        {/* Thinking indicator */}
+        {sending && (
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <LoafCat color={C.muted} size={20} />
+            <span style={{ ...F, fontSize: 10, color: C.muted, letterSpacing: 2,
+              animation: "blink 1s step-end infinite" }}>
+              SNOW IS THINKING...
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Input row */}
+      <div style={{ padding: "10px 14px", borderTop: `1px solid ${C.border}`,
+        display: "flex", gap: 8, alignItems: "center" }}>
+        <input
+          value={input}
+          onChange={e => setInput(e.target.value)}
           onKeyDown={e => e.key === "Enter" && !sending && send()}
           placeholder="Message Snow..."
-          style={{ ...F, flex: 1, background: "#080808", border: `1px solid ${C.border}`, borderRadius: 4,
-            padding: "7px 10px", color: C.text, fontSize: 11, outline: "none", caretColor: C.active }} />
+          style={{ ...F, flex: 1, background: "#080808", border: `1px solid ${C.border}`,
+            borderRadius: 4, padding: "7px 10px", color: C.text, fontSize: 11,
+            outline: "none", caretColor: C.active }}
+        />
         <GreenBtn onClick={send} disabled={sending} style={{ padding: "7px 18px", fontSize: 11 }}>
           {sending ? "SENDING..." : "[ SEND ]"}
         </GreenBtn>
       </div>
-      {confirm && (
-        <div style={{ padding: "0 14px 10px", ...F, fontSize: 10, color: C.active }}>{confirm}</div>
-      )}
     </div>
   );
 }
