@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   useProposals, useDesigns, useReadyListings,
   useSnowReport, usePipelineStatus, usePipelineLogs, useSnowMemory, useSnowChat
@@ -18,28 +18,32 @@ const C = {
   dangerDim:   "#1a0000",
   amber:       "#ffbb44",
   cyan:        "#44ddff",
+  purple:      "#cc88ff",
   dim:         "#00ff8833",
   glow:        "0 0 8px #00ff8844",
   glowStrong:  "0 0 14px #00ff8866",
 };
 const F = { fontFamily: "'Courier New', Courier, monospace" };
 
-// ─── Airtable delete helpers (not in useAirtable.js) ─────
-const BASE_ID = "appsS6oYAVqgJhe7H";
+// ─── API base ─────────────────────────────────────────────
+const API = "http://localhost:8000";
+
+// ─── Airtable delete helpers ───────────────────────────────
+const BASE_ID  = "appsS6oYAVqgJhe7H";
 const TABLE_ID = "tblIyWuFysf5Hxu8u";
 const atHeaders = () => ({ Authorization: `Bearer ${process.env.REACT_APP_AIRTABLE_API_KEY}` });
 
 async function deleteByStatus(statuses, onDone) {
   const formula = encodeURIComponent(`OR(${statuses.map(s => `{status}="${s}"`).join(",")})`);
-  const res = await fetch(
+  const res  = await fetch(
     `https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}?filterByFormula=${formula}`,
     { headers: atHeaders() }
   );
   const data = await res.json();
-  const ids = (data.records || []).map(r => r.id);
+  const ids  = (data.records || []).map(r => r.id);
   if (ids.length === 0) return;
   for (let i = 0; i < ids.length; i += 10) {
-    const chunk = ids.slice(i, i + 10);
+    const chunk  = ids.slice(i, i + 10);
     const params = chunk.map(id => `records[]=${id}`).join("&");
     await fetch(`https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}?${params}`, {
       method: "DELETE", headers: atHeaders(),
@@ -48,7 +52,7 @@ async function deleteByStatus(statuses, onDone) {
   onDone?.();
 }
 
-// ─── Cat SVGs — simple filled silhouette, no outlines ────
+// ─── Cat SVGs ─────────────────────────────────────────────
 const LoafCat = ({ color = C.active, size = 40 }) => (
   <svg width={size} height={Math.round(size * 0.85)} viewBox="0 0 50 43" fill="none">
     <ellipse cx="25" cy="30" rx="22" ry="13" fill={color} />
@@ -58,7 +62,6 @@ const LoafCat = ({ color = C.active, size = 40 }) => (
     <path d="M18,22 Q22,20 26,22 Q30,20 33,22" stroke={C.bg} strokeWidth="1.6" fill="none" strokeLinecap="round" />
   </svg>
 );
-
 const ResearchCat = ({ color = "#00aa55", size = 36 }) => (
   <svg width={size} height={size} viewBox="0 0 44 48" fill="none">
     <ellipse cx="22" cy="38" rx="13" ry="9" fill={color} />
@@ -67,12 +70,9 @@ const ResearchCat = ({ color = "#00aa55", size = 36 }) => (
     <polygon points="33,11 35,2 28,10" fill={color} />
     <circle cx="17" cy="20" r="2.8" fill={C.bg} />
     <circle cx="27" cy="20" r="2.8" fill={C.bg} />
-    <circle cx="17.8" cy="19.2" r="1.1" fill="rgba(255,255,255,0.5)" />
-    <circle cx="27.8" cy="19.2" r="1.1" fill="rgba(255,255,255,0.5)" />
     <path d="M34,40 Q42,34 38,45" stroke={color} strokeWidth="3" fill="none" strokeLinecap="round" />
   </svg>
 );
-
 const DesignCat = ({ color = "#00aa55", size = 36 }) => (
   <svg width={size} height={size} viewBox="0 0 46 48" fill="none">
     <ellipse cx="20" cy="38" rx="12" ry="8" fill={color} />
@@ -85,7 +85,6 @@ const DesignCat = ({ color = "#00aa55", size = 36 }) => (
     <ellipse cx="42" cy="22" rx="4" ry="3" fill={color} />
   </svg>
 );
-
 const ListingCat = ({ color = "#00aa55", size = 36 }) => (
   <svg width={size} height={size} viewBox="0 0 42 48" fill="none">
     <ellipse cx="21" cy="38" rx="13" ry="10" fill={color} />
@@ -97,7 +96,6 @@ const ListingCat = ({ color = "#00aa55", size = 36 }) => (
     <path d="M30,36 Q38,28 35,42 Q30,46 21,44" stroke={color} strokeWidth="3" fill="none" strokeLinecap="round" />
   </svg>
 );
-
 const FeedbackCat = ({ color = "#00aa55", size = 36 }) => (
   <svg width={size} height={size} viewBox="0 0 42 48" fill="none">
     <ellipse cx="21" cy="36" rx="14" ry="11" fill={color} />
@@ -106,18 +104,15 @@ const FeedbackCat = ({ color = "#00aa55", size = 36 }) => (
     <polygon points="31,10 33,2 26,9" fill={color} />
     <circle cx="16.5" cy="19" r="3.2" fill={C.bg} />
     <circle cx="25.5" cy="19" r="3.2" fill={C.bg} />
-    <circle cx="17.3" cy="18" r="1.3" fill="rgba(255,255,255,0.55)" />
-    <circle cx="26.3" cy="18" r="1.3" fill="rgba(255,255,255,0.55)" />
   </svg>
 );
 
-// ─── Base UI atoms ────────────────────────────────────────
+// ─── Base UI atoms ─────────────────────────────────────────
 const GreenBtn = ({ children, onClick, style: ex = {}, disabled }) => (
   <button onClick={onClick} disabled={disabled} style={{
     ...F, background: "transparent", color: C.active, border: `1px solid ${C.active}`,
     borderRadius: 4, padding: "5px 14px", fontSize: 11, cursor: disabled ? "default" : "pointer",
-    letterSpacing: 1, transition: "all 0.15s", opacity: disabled ? 0.4 : 1,
-    ...ex,
+    letterSpacing: 1, transition: "all 0.15s", opacity: disabled ? 0.4 : 1, ...ex,
   }}
     onMouseEnter={e => !disabled && (e.currentTarget.style.boxShadow = C.glow)}
     onMouseLeave={e => (e.currentTarget.style.boxShadow = "none")}
@@ -132,11 +127,19 @@ const RedBtn = ({ children, onClick, style: ex = {} }) => (
   }}>{children}</button>
 );
 
-const GhostBtn = ({ children, onClick, style: ex = {} }) => (
-  <button onClick={onClick} style={{
+const GhostBtn = ({ children, onClick, style: ex = {}, disabled }) => (
+  <button onClick={onClick} disabled={disabled} style={{
     ...F, background: "transparent", color: C.muted, border: `1px solid #333`,
-    borderRadius: 4, padding: "5px 14px", fontSize: 11, cursor: "pointer",
-    letterSpacing: 1, ...ex,
+    borderRadius: 4, padding: "5px 14px", fontSize: 11, cursor: disabled ? "default" : "pointer",
+    letterSpacing: 1, opacity: disabled ? 0.4 : 1, ...ex,
+  }}>{children}</button>
+);
+
+const AmberBtn = ({ children, onClick, style: ex = {}, disabled }) => (
+  <button onClick={onClick} disabled={disabled} style={{
+    ...F, background: "transparent", color: C.amber, border: `1px solid ${C.amber}66`,
+    borderRadius: 4, padding: "5px 14px", fontSize: 11, cursor: disabled ? "default" : "pointer",
+    letterSpacing: 1, opacity: disabled ? 0.4 : 1, ...ex,
   }}>{children}</button>
 );
 
@@ -162,11 +165,15 @@ const StatusDot = ({ state }) => {
 
 const CategoryBadge = ({ category }) => {
   const map = {
-    approved: { color: C.active, bg: "#001a0d", border: C.dim },
-    rejected: { color: "#aa3333", bg: C.dangerDim, border: "#330000" },
-    trend:    { color: C.cyan, bg: "#001a22", border: "#003344" },
-    avoid:    { color: C.amber, bg: "#1a1000", border: "#332200" },
-    general:  { color: C.muted, bg: C.faint, border: "#222" },
+    approved:  { color: C.active,  bg: "#001a0d", border: C.dim },
+    rejected:  { color: "#aa3333", bg: C.dangerDim, border: "#330000" },
+    trend:     { color: C.cyan,    bg: "#001a22", border: "#003344" },
+    avoid:     { color: C.amber,   bg: "#1a1000", border: "#332200" },
+    general:   { color: C.muted,   bg: C.faint,  border: "#222" },
+    STRATEGY:  { color: C.purple,  bg: "#0f001a", border: "#330055" },
+    AUTONOMY:  { color: C.amber,   bg: "#1a1000", border: "#332200" },
+    PIPELINE:  { color: C.cyan,    bg: "#001a22", border: "#003344" },
+    DIRECTIVE: { color: C.active,  bg: "#001a0d", border: C.dim },
   };
   const s = map[category] || map.general;
   return (
@@ -176,14 +183,14 @@ const CategoryBadge = ({ category }) => {
   );
 };
 
-// ─── Sidebar ──────────────────────────────────────────────
+// ─── Sidebar ───────────────────────────────────────────────
 const NAV = [
-  { id: "overview",  label: "OVERVIEW",  sub: "Snow's command center",  Cat: LoafCat },
-  { id: "research",  label: "RESEARCH",  sub: "Etsy trend scanner",     Cat: ResearchCat },
-  { id: "design",    label: "DESIGN",    sub: "Image generator",        Cat: DesignCat },
-  { id: "strategy",  label: "STRATEGY",  sub: "Coming soon",            Cat: ListingCat, disabled: true },
-  { id: "listing",   label: "LISTING",   sub: "SEO & Etsy uploader",    Cat: ListingCat },
-  { id: "feedback",  label: "FEEDBACK",  sub: "Performance tracker",    Cat: FeedbackCat },
+  { id: "overview",  label: "SNOW",     sub: "Agent manager",        Cat: LoafCat },
+  { id: "research",  label: "LEON",     sub: "Research specialist",  Cat: ResearchCat },
+  { id: "design",    label: "RIKO",     sub: "Visual design",        Cat: DesignCat },
+  { id: "strategy",  label: "STRATEGY", sub: "Coming soon",          Cat: ListingCat, disabled: true },
+  { id: "listing",   label: "SNOOPY",   sub: "SEO & listings",       Cat: ListingCat },
+  { id: "feedback",  label: "WAFFLE",   sub: "Performance tracker",  Cat: FeedbackCat },
 ];
 const NAV2 = [
   { id: "logs",   label: "PIPELINE LOGS" },
@@ -195,24 +202,20 @@ function Sidebar({ active, setActive, agentStates, counts }) {
   return (
     <div style={{ width: 260, flexShrink: 0, background: C.bg, borderRight: `1px solid ${C.border}`,
       display: "flex", flexDirection: "column", height: "100vh", position: "sticky", top: 0, overflowY: "auto" }}>
-
-      {/* Logo */}
       <div style={{ padding: "18px 16px 14px", borderBottom: `1px solid ${C.border}` }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
           <LoafCat color={C.active} size={30} />
           <div>
             <div style={{ ...F, fontSize: 14, fontWeight: 700, color: C.active, letterSpacing: 2 }}>PROJECTSNOW</div>
-            <div style={{ ...F, fontSize: 9, color: C.muted, letterSpacing: 1.5 }}>AGENT OPS v0.1</div>
+            <div style={{ ...F, fontSize: 9, color: C.muted, letterSpacing: 1.5 }}>AGENT OPS v2.0</div>
           </div>
         </div>
       </div>
-
-      {/* Main nav */}
       <div style={{ padding: "10px 10px 4px" }}>
         {NAV.map(item => {
           const isActive = active === item.id;
-          const state = agentStates[item.id] || "idle";
-          const count = counts[item.id] || 0;
+          const state    = agentStates[item.id] || "idle";
+          const count    = counts[item.id] || 0;
           return (
             <button key={item.id} onClick={() => !item.disabled && setActive(item.id)} disabled={item.disabled}
               style={{
@@ -221,8 +224,7 @@ function Sidebar({ active, setActive, agentStates, counts }) {
                 border: isActive ? `1px solid ${C.active}` : `1px solid ${C.border}`,
                 borderLeft: isActive ? `3px solid ${C.active}` : `3px solid transparent`,
                 borderRadius: 4, padding: "10px 10px", marginBottom: 5, cursor: item.disabled ? "default" : "pointer",
-                opacity: item.disabled ? 0.3 : 1,
-                boxShadow: isActive ? C.glow : "none",
+                opacity: item.disabled ? 0.3 : 1, boxShadow: isActive ? C.glow : "none",
                 minHeight: 64, transition: "all 0.15s",
               }}>
               <div style={{ flexShrink: 0 }}>
@@ -243,9 +245,7 @@ function Sidebar({ active, setActive, agentStates, counts }) {
             </button>
           );
         })}
-
         <div style={{ height: 1, background: C.border, margin: "8px 4px 10px" }} />
-
         {NAV2.map(item => {
           const isActive = active === item.id;
           return (
@@ -260,9 +260,7 @@ function Sidebar({ active, setActive, agentStates, counts }) {
             </button>
           );
         })}
-
         <div style={{ height: 1, background: C.border, margin: "8px 4px 10px" }} />
-
         {PLACEHOLDERS.map(p => (
           <div key={p} style={{ background: C.card, border: `1px solid #111`, borderRadius: 4,
             padding: "10px 12px", marginBottom: 5, minHeight: 50, display: "flex", alignItems: "center" }}>
@@ -274,7 +272,7 @@ function Sidebar({ active, setActive, agentStates, counts }) {
   );
 }
 
-// ─── Page-level agent header ──────────────────────────────
+// ─── Agent page header ─────────────────────────────────────
 function AgentPageHeader({ CatComp, catColor = "#00aa55", name, sub, state, rightSlot }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "20px 26px 16px",
@@ -304,15 +302,13 @@ const TermLine = ({ text, color = C.muted }) => (
   </div>
 );
 
-// ─── Activity log hook ────────────────────────────────────
-// Accumulates pipeline events from polling + seeds from Airtable run history
+// ─── Activity log hook ─────────────────────────────────────
 function useActivityLog(pipelineStatus, logs) {
   const [entries, setEntries] = useState([]);
   const lastTs   = useRef(null);
   const lastTask = useRef(null);
   const seeded   = useRef(false);
 
-  // Seed from PipelineLogs once
   useEffect(() => {
     if (seeded.current || logs.length === 0) return;
     seeded.current = true;
@@ -326,7 +322,6 @@ function useActivityLog(pipelineStatus, logs) {
     setEntries(initial);
   }, [logs]);
 
-  // Append whenever pipelineStatus changes meaningfully
   useEffect(() => {
     if (!pipelineStatus?.timestamp) return;
     const { timestamp, active_agent, current_task, running, status } = pipelineStatus;
@@ -352,7 +347,459 @@ function useActivityLog(pipelineStatus, logs) {
   return entries;
 }
 
-// ─── System log terminal (Overview) ──────────────────────
+// ─── Pending decisions hook ────────────────────────────────
+function usePendingDecisions() {
+  const [decisions, setDecisions] = useState([]);
+
+  const fetch_ = useCallback(async () => {
+    try {
+      const res  = await fetch(`${API}/decisions`);
+      const data = await res.json();
+      setDecisions(data.decisions || []);
+    } catch (_) {}
+  }, []);
+
+  useEffect(() => {
+    fetch_();
+    const t = setInterval(fetch_, 10000);
+    return () => clearInterval(t);
+  }, [fetch_]);
+
+  const resolve = async (id, status, note = "") => {
+    try {
+      await fetch(`${API}/decisions/${id}/resolve`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ status, note }),
+      });
+      fetch_();
+    } catch (_) {}
+  };
+
+  return { decisions, resolve, refresh: fetch_ };
+}
+
+// ─── Agents status hook ────────────────────────────────────
+function useAgentsStatus() {
+  const [agents, setAgents] = useState([]);
+
+  useEffect(() => {
+    const fetch_ = async () => {
+      try {
+        const res  = await fetch(`${API}/agents/status`);
+        const data = await res.json();
+        setAgents(data.agents || []);
+      } catch (_) {}
+    };
+    fetch_();
+    const t = setInterval(fetch_, 30000);
+    return () => clearInterval(t);
+  }, []);
+
+  return agents;
+}
+
+// ─── Last meeting hook ─────────────────────────────────────
+function useLastMeeting() {
+  const [meeting, setMeeting] = useState(null);
+
+  useEffect(() => {
+    const fetch_ = async () => {
+      try {
+        const res  = await fetch(`${API}/meeting/last`);
+        const data = await res.json();
+        setMeeting(data.meeting || null);
+      } catch (_) {}
+    };
+    fetch_();
+    const t = setInterval(fetch_, 60000);
+    return () => clearInterval(t);
+  }, []);
+
+  return meeting;
+}
+
+// ─── Chat (now from SnowBrain) ─────────────────────────────
+const fmtTime = (ts) => {
+  if (!ts) return "";
+  const d = new Date(ts);
+  return isNaN(d) ? "" : d.toTimeString().slice(0, 5);
+};
+
+function SnowChat() {
+  const [input, setInput]     = useState("");
+  const [sending, setSending] = useState(false);
+  const { messages }          = useSnowChat();
+  const scrollRef             = useRef(null);
+
+  useEffect(() => {
+    if (scrollRef.current)
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [messages, sending]);
+
+  const send = async () => {
+    const msg = input.trim();
+    if (!msg || sending) return;
+    setSending(true);
+    setInput("");
+    try {
+      await fetch(`${API}/telegram?message=${encodeURIComponent(msg)}`);
+    } catch (_) {}
+    setTimeout(() => setSending(false), 15000);
+  };
+
+  return (
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, overflow: "hidden" }}>
+      <div style={{ padding: "10px 14px", borderBottom: `1px solid ${C.border}`,
+        display: "flex", alignItems: "center", gap: 8 }}>
+        <LoafCat color={C.active} size={20} />
+        <span style={{ ...F, fontSize: 11, color: C.active, letterSpacing: 2 }}>DIRECT LINE — SNOW</span>
+        <span style={{ ...F, fontSize: 9, color: C.muted, marginLeft: "auto", letterSpacing: 1 }}>
+          claude-opus-4.6
+        </span>
+      </div>
+      <div ref={scrollRef} style={{ height: 320, overflowY: "auto", padding: "14px 14px 8px",
+        display: "flex", flexDirection: "column", gap: 12, background: "#060606" }}>
+        {messages.length === 0 && !sending && (
+          <div style={{ ...F, fontSize: 10, color: "#223322", textAlign: "center",
+            marginTop: 100, letterSpacing: 1 }}>NO MESSAGES YET — SAY SOMETHING TO SNOW</div>
+        )}
+        {messages.map((m, i) => m.role === "user" ? (
+          <div key={i} style={{ display: "flex", justifyContent: "flex-end", gap: 8, alignItems: "flex-end" }}>
+            <span style={{ ...F, fontSize: 8, color: "#334433", flexShrink: 0 }}>{fmtTime(m.timestamp)}</span>
+            <div>
+              <div style={{ ...F, fontSize: 8, color: C.muted, textAlign: "right", marginBottom: 4, letterSpacing: 1 }}>YOU</div>
+              <div style={{ ...F, fontSize: 11, color: C.active, background: "#001a0d",
+                border: `1px solid ${C.dim}`, borderRadius: "6px 6px 2px 6px",
+                padding: "8px 12px", maxWidth: 320, lineHeight: 1.65, wordBreak: "break-word" }}>{m.text}</div>
+            </div>
+          </div>
+        ) : (
+          <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+            <div style={{ flexShrink: 0, marginTop: 18 }}><LoafCat color={C.active} size={20} /></div>
+            <div>
+              <div style={{ ...F, fontSize: 8, color: C.muted, marginBottom: 4, letterSpacing: 1 }}>
+                SNOW <span style={{ color: "#334433" }}>{fmtTime(m.timestamp)}</span>
+              </div>
+              <div style={{ ...F, fontSize: 11, color: C.text, background: "#0a0a0a",
+                border: `1px solid ${C.border}`, borderRadius: "6px 6px 6px 2px",
+                padding: "9px 13px", maxWidth: 400, lineHeight: 1.75, wordBreak: "break-word",
+                boxShadow: C.glow }}>{m.text}</div>
+            </div>
+          </div>
+        ))}
+        {sending && (
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <LoafCat color={C.muted} size={20} />
+            <span style={{ ...F, fontSize: 10, color: C.muted, letterSpacing: 2,
+              animation: "blink 1s step-end infinite" }}>SNOW IS THINKING...</span>
+          </div>
+        )}
+      </div>
+      <div style={{ padding: "10px 14px", borderTop: `1px solid ${C.border}`,
+        display: "flex", gap: 8, alignItems: "center" }}>
+        <input value={input} onChange={e => setInput(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && !sending && send()}
+          placeholder="Message Snow..."
+          style={{ ...F, flex: 1, background: "#080808", border: `1px solid ${C.border}`,
+            borderRadius: 4, padding: "7px 10px", color: C.text, fontSize: 11,
+            outline: "none", caretColor: C.active }} />
+        <GreenBtn onClick={send} disabled={sending} style={{ padding: "7px 18px", fontSize: 11 }}>
+          {sending ? "SENDING..." : "[ SEND ]"}
+        </GreenBtn>
+      </div>
+    </div>
+  );
+}
+
+// ─── Decision card ─────────────────────────────────────────
+function DecisionCard({ decision, onResolve }) {
+  const [modifying, setModifying] = useState(false);
+  const [note, setNote]           = useState("");
+
+  const typeColor = {
+    STRATEGY:  C.purple,
+    AUTONOMY:  C.amber,
+    PIPELINE:  C.cyan,
+    DIRECTIVE: C.active,
+  };
+  const color = typeColor[decision.decision_type?.toUpperCase()] || C.muted;
+
+  return (
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6,
+      padding: "14px 16px", marginBottom: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+        <CategoryBadge category={decision.decision_type?.toUpperCase() || "GENERAL"} />
+        <span style={{ ...F, fontSize: 9, color: "#334433", marginLeft: "auto" }}>
+          {String(decision.created_at || "").slice(0, 16)}
+        </span>
+      </div>
+      <div style={{ ...F, fontSize: 12, color: C.text, marginBottom: 6, lineHeight: 1.5 }}>
+        {decision.description}
+      </div>
+      <div style={{ ...F, fontSize: 10, color: C.muted, lineHeight: 1.6, marginBottom: 10,
+        borderLeft: `2px solid ${color}33`, paddingLeft: 10 }}>
+        {decision.recommendation}
+      </div>
+      {modifying && (
+        <input value={note} onChange={e => setNote(e.target.value)}
+          placeholder="Note (optional)..."
+          style={{ ...F, width: "100%", marginBottom: 8, background: "#060606",
+            border: `1px solid ${C.border}`, borderRadius: 4, padding: "6px 10px",
+            color: C.text, fontSize: 10, outline: "none", boxSizing: "border-box" }} />
+      )}
+      <div style={{ display: "flex", gap: 6 }}>
+        <GreenBtn onClick={() => onResolve(decision.id, "approved", note)}
+          style={{ flex: 1, padding: "6px 0", fontSize: 10, letterSpacing: 1 }}>
+          [ APPROVE ]
+        </GreenBtn>
+        <AmberBtn onClick={() => setModifying(!modifying)}
+          style={{ padding: "6px 12px", fontSize: 10, letterSpacing: 1 }}>
+          [ MODIFY ]
+        </AmberBtn>
+        <RedBtn onClick={() => onResolve(decision.id, "rejected", note)}
+          style={{ padding: "6px 12px", fontSize: 10, letterSpacing: 1 }}>
+          [ REJECT ]
+        </RedBtn>
+      </div>
+    </div>
+  );
+}
+
+// ─── Agent mini card ───────────────────────────────────────
+function AgentMiniCard({ agent, onClick }) {
+  const name   = agent.name;
+  const runs   = agent.run_count || 0;
+  const level  = agent.autonomy_level || 0;
+  const trends = agent.trends || {};
+  const metrics = agent.metrics || {};
+
+  const lastRun = agent.last_run?.run_date
+    ? String(agent.last_run.run_date).slice(0, 10)
+    : "never";
+
+  // Determine dot color based on last run recency
+  let dotColor = "#334433"; // gray = idle
+  if (agent.last_run?.run_date) {
+    const runDate = new Date(agent.last_run.run_date);
+    const now     = new Date();
+    const diffMs  = now - runDate;
+    const diffDays = diffMs / (1000 * 60 * 60 * 24);
+    if (diffDays < 1)       dotColor = C.active;  // green = ran today
+    else if (diffDays < 7)  dotColor = C.amber;   // amber = ran this week
+  }
+
+  // Primary metric
+  const primaryMetric = Object.entries(metrics).find(([k]) =>
+    k === "approval_rate" || k === "completion_rate" || k === "listings_per_run"
+  );
+  const metricLabel = primaryMetric ? primaryMetric[0] : null;
+  const metricValue = primaryMetric ? primaryMetric[1] : null;
+  const trendArrow  = metricLabel
+    ? ({ up: "↑", down: "↓", stable: "→" }[trends[metricLabel]] || "→")
+    : "";
+
+  const CatMap = { Leon: ResearchCat, Riko: DesignCat, Snoopy: ListingCat, Waffle: FeedbackCat };
+  const Cat = CatMap[name] || FeedbackCat;
+
+  return (
+    <div onClick={onClick} style={{ background: C.card, border: `1px solid ${C.border}`,
+      borderRadius: 6, padding: "14px 14px", cursor: "pointer", transition: "all 0.15s" }}
+      onMouseEnter={e => { e.currentTarget.style.borderColor = C.active + "88"; e.currentTarget.style.boxShadow = C.glow; }}
+      onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.boxShadow = "none"; }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+        <Cat color={dotColor} size={26} />
+        <div>
+          <div style={{ ...F, fontSize: 12, fontWeight: 700, color: C.active, letterSpacing: 1.5 }}>{name.toUpperCase()}</div>
+          <div style={{ ...F, fontSize: 8, color: C.muted, letterSpacing: 0.5 }}>{agent.role?.slice(0, 28)}</div>
+        </div>
+        <span style={{ marginLeft: "auto", width: 8, height: 8, borderRadius: "50%",
+          background: dotColor, flexShrink: 0, boxShadow: dotColor === C.active ? `0 0 5px ${C.active}` : "none",
+          display: "inline-block" }} />
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+        <div>
+          <div style={{ ...F, fontSize: 8, color: C.muted, letterSpacing: 1, marginBottom: 2 }}>TOTAL RUNS</div>
+          <div style={{ ...F, fontSize: 18, fontWeight: 700, color: C.text }}>{runs}</div>
+        </div>
+        {metricLabel && (
+          <div>
+            <div style={{ ...F, fontSize: 8, color: C.muted, letterSpacing: 1, marginBottom: 2 }}>
+              {metricLabel.toUpperCase()}
+            </div>
+            <div style={{ ...F, fontSize: 18, fontWeight: 700, color: C.text }}>
+              {typeof metricValue === "number"
+                ? (metricValue < 1.5 ? (metricValue * 100).toFixed(0) + "%" : metricValue.toFixed(1))
+                : "—"}
+              <span style={{ fontSize: 12, marginLeft: 4, color: trendArrow === "↑" ? C.active : trendArrow === "↓" ? C.danger : C.muted }}>
+                {trendArrow}
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+      <div style={{ ...F, fontSize: 8, color: "#334433", marginTop: 8, letterSpacing: 0.5 }}>
+        last: {lastRun} · autonomy: {level}/10
+      </div>
+    </div>
+  );
+}
+
+// ─── Overview page (Snow's command center) ─────────────────
+function OverviewPage({ setActive }) {
+  const { decisions, resolve } = usePendingDecisions();
+  const agentsStatus           = useAgentsStatus();
+  const lastMeeting            = useLastMeeting();
+  const [meetingBusy, setMeetingBusy] = useState(false);
+
+  const subAgents = agentsStatus.filter(a => a.name !== "Snow");
+  const snowAgent = agentsStatus.find(a => a.name === "Snow");
+
+  const callMeeting = async () => {
+    setMeetingBusy(true);
+    try {
+      await fetch(`${API}/meeting`, { method: "POST" });
+    } catch (_) {}
+    setTimeout(() => setMeetingBusy(false), 3000);
+  };
+
+  // Next Monday countdown
+  const nextMondayStr = (() => {
+    const now  = new Date();
+    const day  = now.getDay();
+    const diff = day === 1 ? 7 : (8 - day) % 7 || 7;
+    const next = new Date(now);
+    next.setDate(now.getDate() + diff);
+    next.setHours(9, 0, 0, 0);
+    const diffMs = next - now;
+    const days   = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const hours  = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    return days > 0 ? `in ${days}d ${hours}h` : `in ${hours}h`;
+  })();
+
+  const agentPageMap = { Leon: "research", Riko: "design", Snoopy: "listing", Waffle: "feedback" };
+
+  return (
+    <div style={{ padding: "24px 26px" }}>
+
+      {/* Snow identity row */}
+      <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 20,
+        padding: "16px", background: C.card, border: `1px solid ${C.active}33`,
+        borderRadius: 6, boxShadow: C.glow }}>
+        <div style={{ width: 56, height: 56, borderRadius: 6, background: "#040804",
+          border: `1px solid ${C.active}44`, display: "flex", alignItems: "center",
+          justifyContent: "center", flexShrink: 0, boxShadow: C.glowStrong }}>
+          <LoafCat color={C.active} size={40} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
+            <div style={{ ...F, fontSize: 20, fontWeight: 700, color: C.active, letterSpacing: 3 }}>SNOW</div>
+            <div style={{ ...F, fontSize: 9, color: C.muted, letterSpacing: 2 }}>AGENT MANAGER</div>
+            <span style={{ ...F, fontSize: 9, color: C.active, background: "#001a0d",
+              border: `1px solid ${C.dim}`, borderRadius: 3, padding: "2px 8px", letterSpacing: 1 }}>
+              claude-opus-4.6
+            </span>
+          </div>
+          {/* Agent status row */}
+          <div style={{ display: "flex", gap: 16, marginTop: 10 }}>
+            {subAgents.map(a => {
+              let dotColor = "#334433";
+              if (a.last_run?.run_date) {
+                const diff = (Date.now() - new Date(a.last_run.run_date)) / 86400000;
+                dotColor = diff < 1 ? C.active : diff < 7 ? C.amber : "#334433";
+              }
+              return (
+                <div key={a.name} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: "50%", background: dotColor,
+                    display: "inline-block", boxShadow: dotColor === C.active ? `0 0 5px ${C.active}` : "none" }} />
+                  <span style={{ ...F, fontSize: 9, color: dotColor === "#334433" ? C.muted : C.text,
+                    letterSpacing: 1 }}>{a.name.toUpperCase()}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <div style={{ ...F, fontSize: 8, color: C.muted, letterSpacing: 1, marginBottom: 4 }}>AUTONOMY</div>
+          <div style={{ ...F, fontSize: 22, fontWeight: 700, color: C.amber }}>
+            {snowAgent?.autonomy_level ?? 5}<span style={{ fontSize: 10, color: C.muted }}>/10</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Pending decisions */}
+      <div style={{ marginBottom: 22 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+          <div style={{ ...F, fontSize: 13, fontWeight: 700, color: C.text, letterSpacing: 2 }}>
+            PENDING DECISIONS
+          </div>
+          {decisions.length > 0 && (
+            <span style={{ ...F, fontSize: 10, color: C.danger, background: C.dangerDim,
+              border: `1px solid ${C.danger}44`, borderRadius: 3, padding: "1px 8px", letterSpacing: 1 }}>
+              {decisions.length}
+            </span>
+          )}
+        </div>
+        {decisions.length === 0 ? (
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6,
+            padding: "28px", textAlign: "center" }}>
+            <div style={{ ...F, fontSize: 11, color: C.muted, letterSpacing: 2 }}>
+              NO PENDING DECISIONS — SNOW IS WATCHING
+            </div>
+          </div>
+        ) : (
+          decisions.map(d => (
+            <DecisionCard key={d.id} decision={d} onResolve={resolve} />
+          ))
+        )}
+      </div>
+
+      {/* Weekly meeting */}
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6,
+        padding: "14px 16px", marginBottom: 18 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+          <Label style={{ margin: 0 }}>WEEKLY MEETING</Label>
+          <span style={{ ...F, fontSize: 9, color: C.muted, marginLeft: "auto" }}>Next: Monday 09:00 ({nextMondayStr})</span>
+        </div>
+        {lastMeeting ? (
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ ...F, fontSize: 9, color: C.muted, letterSpacing: 1, marginBottom: 4 }}>
+              LAST MEETING — {String(lastMeeting.meeting_date || "").slice(0, 10)}
+            </div>
+            <div style={{ ...F, fontSize: 10, color: C.muted, lineHeight: 1.7, maxHeight: 56, overflow: "hidden" }}>
+              {(lastMeeting.summary || "").slice(0, 220)}
+            </div>
+          </div>
+        ) : (
+          <div style={{ ...F, fontSize: 10, color: "#223322", marginBottom: 10 }}>No meetings yet</div>
+        )}
+        <GreenBtn onClick={callMeeting} disabled={meetingBusy}
+          style={{ fontSize: 10, letterSpacing: 1 }}>
+          {meetingBusy ? "CALLING MEETING..." : "[ CALL MEETING NOW ]"}
+        </GreenBtn>
+      </div>
+
+      {/* Agent performance cards */}
+      <Label style={{ marginBottom: 10 }}>AGENT PERFORMANCE</Label>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 22 }}>
+        {subAgents.map(a => (
+          <AgentMiniCard key={a.name} agent={a}
+            onClick={() => setActive(agentPageMap[a.name] || "overview")} />
+        ))}
+        {subAgents.length === 0 && (
+          <div style={{ gridColumn: "1 / -1" }}>
+            <EmptyState text="NO AGENT DATA YET — RUN THE PIPELINE" />
+          </div>
+        )}
+      </div>
+
+      {/* Direct line chat */}
+      <SnowChat />
+    </div>
+  );
+}
+
+// ─── System log ───────────────────────────────────────────
 function SystemLog({ entries }) {
   const scrollRef = useRef(null);
   useEffect(() => {
@@ -366,8 +813,6 @@ function SystemLog({ entries }) {
     return C.cyan;
   };
 
-  const shown = entries.slice(-10);
-
   return (
     <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6,
       overflow: "hidden", marginBottom: 18 }}>
@@ -380,18 +825,17 @@ function SystemLog({ entries }) {
       </div>
       <div ref={scrollRef} style={{ background: "#050505", padding: "10px 14px", height: 190,
         overflowY: "auto", display: "flex", flexDirection: "column", gap: 1 }}>
-        {shown.length === 0 && (
-          <span style={{ ...F, fontSize: 10, color: C.muted }}>Waiting for pipeline activity...</span>
-        )}
-        {shown.map(entry => (
-          <div key={entry.id} style={{ ...F, fontSize: 10, lineHeight: 1.8,
-            animation: "termEntry 0.2s ease forwards" }}>
+        {entries.slice(-10).map(entry => (
+          <div key={entry.id} style={{ ...F, fontSize: 10, lineHeight: 1.8 }}>
             <span style={{ color: "#334433" }}>[{entry.time}]</span>
             <span style={{ color: C.active, margin: "0 7px" }}>{entry.agent}</span>
             <span style={{ color: "#223322" }}>—</span>
             <span style={{ marginLeft: 7, color: lineColor(entry.type) }}>{entry.message}</span>
           </div>
         ))}
+        {entries.length === 0 && (
+          <span style={{ ...F, fontSize: 10, color: C.muted }}>Waiting for pipeline activity...</span>
+        )}
         <div style={{ ...F, fontSize: 10, color: C.active, animation: "blink 1.1s step-end infinite",
           marginTop: 2, lineHeight: 1 }}>_</div>
       </div>
@@ -399,22 +843,17 @@ function SystemLog({ entries }) {
   );
 }
 
-// ─── Agent log terminal (per-agent pages) ─────────────────
 function AgentLog({ agentName, entries, isActive }) {
   const scrollRef = useRef(null);
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [entries, isActive]);
 
-  const relevant = entries
-    .filter(e => e.agent === agentName.toUpperCase())
-    .slice(-5);
-
+  const relevant = entries.filter(e => e.agent === agentName.toUpperCase()).slice(-5);
   return (
     <div style={{ margin: "0 26px 24px", background: "#050505",
       border: `1px solid ${isActive ? C.active + "44" : C.border}`,
-      borderRadius: 6, overflow: "hidden",
-      boxShadow: isActive ? C.glow : "none", transition: "border-color 0.3s" }}>
+      borderRadius: 6, overflow: "hidden", boxShadow: isActive ? C.glow : "none" }}>
       <div style={{ padding: "5px 12px", borderBottom: `1px solid ${isActive ? C.active + "22" : C.faint}`,
         display: "flex", alignItems: "center", gap: 8 }}>
         <span style={{ ...F, fontSize: 8, color: C.muted, letterSpacing: 2 }}>AGENT LOG</span>
@@ -426,16 +865,14 @@ function AgentLog({ agentName, entries, isActive }) {
           <span style={{ ...F, fontSize: 10, color: "#2a3a2a" }}>No activity this session.</span>
         )}
         {relevant.map(entry => (
-          <div key={entry.id} style={{ ...F, fontSize: 10, color: C.active,
-            lineHeight: 1.7, animation: "termEntry 0.2s ease forwards" }}>
+          <div key={entry.id} style={{ ...F, fontSize: 10, color: C.active, lineHeight: 1.7 }}>
             <span style={{ color: "#334433" }}>[{entry.time}]</span>
             <span style={{ marginLeft: 7, color: C.active }}>{entry.message}</span>
           </div>
         ))}
         {isActive && (
           <div style={{ ...F, fontSize: 10, color: C.active, lineHeight: 1.7 }}>
-            processing
-            <span style={{ animation: "blink 1s step-end infinite" }}>_</span>
+            processing<span style={{ animation: "blink 1s step-end infinite" }}>_</span>
           </div>
         )}
       </div>
@@ -443,262 +880,24 @@ function AgentLog({ agentName, entries, isActive }) {
   );
 }
 
-// ─── Overview page ────────────────────────────────────────
-const fmtTime = (ts) => {
-  if (!ts) return "";
-  const d = new Date(ts);
-  return isNaN(d) ? "" : d.toTimeString().slice(0, 5);
-};
-
-function SnowChat() {
-  const [input, setInput] = useState("");
-  const [sending, setSending] = useState(false);
-  const { messages } = useSnowChat();
-  const scrollRef = useRef(null);
-
-  // Auto-scroll to bottom on new messages or thinking state
-  useEffect(() => {
-    if (scrollRef.current)
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages, sending]);
-
-  const send = async () => {
-    const msg = input.trim();
-    if (!msg || sending) return;
-    setSending(true);
-    setInput("");
-    try {
-      await fetch(`http://localhost:8000/telegram?message=${encodeURIComponent(msg)}`);
-    } catch (_) {}
-    // Keep sending=true until the next poll brings Snow's reply
-    setTimeout(() => setSending(false), 15000);
-  };
-
-  return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, overflow: "hidden" }}>
-      {/* Header */}
-      <div style={{ padding: "10px 14px", borderBottom: `1px solid ${C.border}`,
-        display: "flex", alignItems: "center", gap: 8 }}>
-        <LoafCat color={C.active} size={20} />
-        <span style={{ ...F, fontSize: 11, color: C.active, letterSpacing: 2 }}>DIRECT LINE — SNOW</span>
-        <span style={{ ...F, fontSize: 9, color: C.muted, marginLeft: "auto", letterSpacing: 1 }}>
-          claude-opus-4.6
-        </span>
-      </div>
-
-      {/* Messages */}
-      <div ref={scrollRef} style={{
-        height: 320, overflowY: "auto", padding: "14px 14px 8px",
-        display: "flex", flexDirection: "column", gap: 12,
-        background: "#060606",
-      }}>
-        {messages.length === 0 && !sending && (
-          <div style={{ ...F, fontSize: 10, color: "#223322", textAlign: "center",
-            marginTop: 100, letterSpacing: 1 }}>
-            NO MESSAGES YET — SAY SOMETHING TO SNOW
-          </div>
-        )}
-
-        {messages.map((m, i) => m.role === "user" ? (
-          /* User bubble — right */
-          <div key={i} style={{ display: "flex", justifyContent: "flex-end",
-            gap: 8, alignItems: "flex-end" }}>
-            <span style={{ ...F, fontSize: 8, color: "#334433", flexShrink: 0 }}>
-              {fmtTime(m.timestamp)}
-            </span>
-            <div>
-              <div style={{ ...F, fontSize: 8, color: C.muted, textAlign: "right",
-                marginBottom: 4, letterSpacing: 1 }}>YOU</div>
-              <div style={{
-                ...F, fontSize: 11, color: C.active,
-                background: "#001a0d", border: `1px solid ${C.dim}`,
-                borderRadius: "6px 6px 2px 6px",
-                padding: "8px 12px", maxWidth: 320, lineHeight: 1.65,
-                wordBreak: "break-word",
-              }}>{m.text}</div>
-            </div>
-          </div>
-        ) : (
-          /* Snow bubble — left */
-          <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-            <div style={{ flexShrink: 0, marginTop: 18 }}>
-              <LoafCat color={C.active} size={20} />
-            </div>
-            <div>
-              <div style={{ ...F, fontSize: 8, color: C.muted, marginBottom: 4, letterSpacing: 1 }}>
-                SNOW <span style={{ color: "#334433" }}>{fmtTime(m.timestamp)}</span>
-              </div>
-              <div style={{
-                ...F, fontSize: 11, color: C.text,
-                background: "#0a0a0a", border: `1px solid ${C.border}`,
-                borderRadius: "6px 6px 6px 2px",
-                padding: "9px 13px", maxWidth: 400, lineHeight: 1.75,
-                wordBreak: "break-word",
-                boxShadow: C.glow,
-              }}>{m.text}</div>
-            </div>
-          </div>
-        ))}
-
-        {/* Thinking indicator */}
-        {sending && (
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <LoafCat color={C.muted} size={20} />
-            <span style={{ ...F, fontSize: 10, color: C.muted, letterSpacing: 2,
-              animation: "blink 1s step-end infinite" }}>
-              SNOW IS THINKING...
-            </span>
-          </div>
-        )}
-      </div>
-
-      {/* Input row */}
-      <div style={{ padding: "10px 14px", borderTop: `1px solid ${C.border}`,
-        display: "flex", gap: 8, alignItems: "center" }}>
-        <input
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && !sending && send()}
-          placeholder="Message Snow..."
-          style={{ ...F, flex: 1, background: "#080808", border: `1px solid ${C.border}`,
-            borderRadius: 4, padding: "7px 10px", color: C.text, fontSize: 11,
-            outline: "none", caretColor: C.active }}
-        />
-        <GreenBtn onClick={send} disabled={sending} style={{ padding: "7px 18px", fontSize: 11 }}>
-          {sending ? "SENDING..." : "[ SEND ]"}
-        </GreenBtn>
-      </div>
-    </div>
-  );
-}
-
-function OverviewPage({ report, pipelineStatus, proposals, designs, listings, memory, entries }) {
-  const steps = ["INIT", "SNOW", "RESEARCH", "DESIGN", "LISTING", "FEEDBACK"];
-  const agentToStep = { "Snow": 1, "Research Agent": 2, "Design Agent": 3, "Listing Agent": 4, "Feedback Agent": 5 };
-  const activeIdx = pipelineStatus?.running ? (agentToStep[pipelineStatus?.active_agent] ?? 0) : -1;
-
-  const approved = proposals.filter(p => p.status === "approved");
-  const rate = proposals.length ? `${Math.round(approved.length / proposals.length * 100)}%` : "—";
-
-  return (
-    <div style={{ padding: "24px 26px" }}>
-
-      {/* Snow identity */}
-      <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 24 }}>
-        <div style={{ width: 64, height: 64, borderRadius: 6, background: C.card, border: `1px solid ${C.active}44`,
-          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-          boxShadow: C.glowStrong }}>
-          <LoafCat color={C.active} size={46} />
-        </div>
-        <div>
-          <div style={{ ...F, fontSize: 22, fontWeight: 700, color: C.active, letterSpacing: 3, marginBottom: 3 }}>SNOW</div>
-          <div style={{ ...F, fontSize: 10, color: C.muted, letterSpacing: 2, marginBottom: 6 }}>RUTHLESS MARKET ANALYST</div>
-          <span style={{ ...F, fontSize: 9, color: C.active, background: "#001a0d", border: `1px solid ${C.dim}`,
-            borderRadius: 3, padding: "2px 8px", letterSpacing: 1 }}>claude-opus-4.6</span>
-        </div>
-      </div>
-
-      {/* Pipeline status bar */}
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, padding: "14px 16px", marginBottom: 18 }}>
-        <Label>Pipeline Status</Label>
-        <div style={{ display: "grid", gridTemplateColumns: `repeat(${steps.length}, 1fr)`, gap: 6 }}>
-          {steps.map((s, i) => {
-            const isActive = i === activeIdx;
-            const isDone = i < activeIdx && activeIdx >= 0;
-            return (
-              <div key={s} style={{
-                background: isActive ? "#001a0d" : isDone ? "#060d06" : "#0a0a0a",
-                border: `1px solid ${isActive ? C.active : isDone ? C.active + "44" : "#1a1a1a"}`,
-                borderRadius: 4, padding: "7px 6px", textAlign: "center",
-                boxShadow: isActive ? C.glow : "none", transition: "all 0.3s",
-              }}>
-                <div style={{ ...F, fontSize: 9, color: isActive ? C.active : isDone ? C.active + "88" : C.muted,
-                  letterSpacing: 1, whiteSpace: "nowrap" }}>
-                  {isActive && <span style={{ marginRight: 4 }}>&#9679;</span>}{s}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* System log */}
-      <SystemLog entries={entries} />
-
-      {/* Stats row */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 18 }}>
-        {[
-          { label: "PROPOSALS REVIEWED", value: proposals.length },
-          { label: "APPROVAL RATE", value: rate },
-          { label: "DESIGNS GENERATED", value: designs.length },
-          { label: "LISTINGS READY", value: listings.length },
-        ].map(s => (
-          <div key={s.label} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, padding: "14px 16px" }}>
-            <div style={{ ...F, fontSize: 26, fontWeight: 700, color: C.text, marginBottom: 5 }}>{s.value}</div>
-            <div style={{ ...F, fontSize: 8, color: C.muted, letterSpacing: 1.5 }}>{s.label}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Snow report */}
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, padding: "14px 16px", marginBottom: 18 }}>
-        <Label>Last Snow Report</Label>
-        {report ? (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 14 }}>
-            <div>
-              <div style={{ ...F, fontSize: 9, color: C.muted, letterSpacing: 1, marginBottom: 6 }}>PRIORITY NICHE</div>
-              <div style={{ ...F, fontSize: 14, color: C.active, letterSpacing: 1 }}>{report.priority_niche || "—"}</div>
-            </div>
-            <div>
-              <div style={{ ...F, fontSize: 9, color: C.muted, letterSpacing: 1, marginBottom: 6 }}>SUMMARY</div>
-              <div style={{ ...F, fontSize: 11, color: C.muted, lineHeight: 1.7 }}>{report.summary?.slice(0, 240) || "—"}</div>
-            </div>
-          </div>
-        ) : (
-          <EmptyState text="NO REPORT YET — RUN THE PIPELINE" />
-        )}
-      </div>
-
-      {/* Memory preview */}
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, padding: "14px 16px", marginBottom: 18 }}>
-        <Label>Memory Preview</Label>
-        {memory.length === 0
-          ? <EmptyState text="NO MEMORY ENTRIES YET" />
-          : memory.slice(0, 5).map(m => (
-            <div key={m.id} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "8px 0",
-              borderBottom: `1px solid ${C.faint}` }}>
-              <CategoryBadge category={m.category} />
-              <div style={{ ...F, fontSize: 11, color: C.muted, flex: 1, lineHeight: 1.6 }}>{m.observation}</div>
-              <div style={{ ...F, fontSize: 9, color: "#333", whiteSpace: "nowrap" }}>{m.created_at?.slice(0, 10)}</div>
-            </div>
-          ))
-        }
-      </div>
-
-      {/* Snow chat */}
-      <SnowChat />
-    </div>
-  );
-}
-
-// ─── Research page ────────────────────────────────────────
+// ─── Research / Leon page ─────────────────────────────────
 function ResearchPage({ proposals, decide, activeAgent, refresh, entries }) {
-  const state = activeAgent === "Research Agent" ? "running" : proposals.filter(p => p.status === "pending").length > 0 ? "waiting" : "idle";
+  const state   = activeAgent === "Leon" ? "running" : proposals.filter(p => p.status === "pending").length > 0 ? "waiting" : "idle";
   const pending = proposals.filter(p => p.status === "pending");
   const decided = proposals.filter(p => p.status !== "pending");
 
   return (
     <div>
-      <AgentPageHeader CatComp={ResearchCat} name="RESEARCH AGENT" sub="claude-haiku-4.5 — Etsy trend scanner & niche researcher" state={state}
+      <AgentPageHeader CatComp={ResearchCat} name="LEON" sub="claude-haiku-4.5 — Market Research Specialist" state={state}
         rightSlot={
           <GhostBtn onClick={() => deleteByStatus(["rejected"], refresh)} style={{ fontSize: 10, letterSpacing: 1 }}>
             [ CLEAR REJECTED ]
           </GhostBtn>
         }
       />
-      <TermLine text={`${pending.length} proposal${pending.length !== 1 ? "s" : ""} pending review`} color={state === "running" ? C.active : C.muted} />
+      <TermLine text={`${pending.length} proposal${pending.length !== 1 ? "s" : ""} pending review`}
+        color={state === "running" ? C.active : C.muted} />
       <div style={{ padding: "20px 26px" }}>
-
         {pending.length > 0 && (
           <>
             <Label>AWAITING APPROVAL ({pending.length})</Label>
@@ -716,7 +915,6 @@ function ResearchPage({ proposals, decide, activeAgent, refresh, entries }) {
             </div>
           </>
         )}
-
         {decided.length > 0 && (
           <>
             <Label>DECIDED</Label>
@@ -732,27 +930,27 @@ function ResearchPage({ proposals, decide, activeAgent, refresh, entries }) {
             </div>
           </>
         )}
-
         {proposals.length === 0 && <EmptyState text="NO PROPOSALS — LAUNCH THE PIPELINE" />}
       </div>
-      <AgentLog agentName="Research Agent" entries={entries} isActive={state === "running"} />
+      <AgentLog agentName="Leon" entries={entries} isActive={state === "running"} />
     </div>
   );
 }
 
-// ─── Design page ──────────────────────────────────────────
+// ─── Design / Riko page ────────────────────────────────────
 function DesignPage({ designs, decideDesign, activeAgent, onSelect, refresh, entries }) {
-  const state = activeAgent === "Design Agent" ? "running" : designs.length > 0 ? "waiting" : "idle";
+  const state = activeAgent === "Riko" ? "running" : designs.length > 0 ? "waiting" : "idle";
   return (
     <div>
-      <AgentPageHeader CatComp={DesignCat} name="DESIGN AGENT" sub="flux-schnell via Replicate — Image generator" state={state}
+      <AgentPageHeader CatComp={DesignCat} name="RIKO" sub="flux-schnell via Replicate — Visual Design Specialist" state={state}
         rightSlot={
           <GhostBtn onClick={() => deleteByStatus(["design_rejected"], refresh)} style={{ fontSize: 10, letterSpacing: 1 }}>
             [ CLEAR REJECTED ]
           </GhostBtn>
         }
       />
-      <TermLine text={`${designs.length} design${designs.length !== 1 ? "s" : ""} awaiting review`} color={state === "running" ? C.active : C.muted} />
+      <TermLine text={`${designs.length} design${designs.length !== 1 ? "s" : ""} awaiting review`}
+        color={state === "running" ? C.active : C.muted} />
       <div style={{ padding: "20px 26px" }}>
         {designs.length === 0
           ? <EmptyState text="NO DESIGNS READY YET — APPROVE PROPOSALS TO GENERATE" />
@@ -761,8 +959,7 @@ function DesignPage({ designs, decideDesign, activeAgent, onSelect, refresh, ent
               <Label>DESIGNS AWAITING REVIEW ({designs.length})</Label>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
                 {designs.map(d => (
-                  <div key={d.id} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, overflow: "hidden",
-                    transition: "border-color 0.15s, box-shadow 0.15s" }}
+                  <div key={d.id} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, overflow: "hidden" }}
                     onMouseEnter={e => { e.currentTarget.style.borderColor = C.active; e.currentTarget.style.boxShadow = C.glow; }}
                     onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.boxShadow = "none"; }}>
                     {d.image_url && (
@@ -771,8 +968,7 @@ function DesignPage({ designs, decideDesign, activeAgent, onSelect, refresh, ent
                         <button onClick={() => onSelect(d)} style={{
                           position: "absolute", top: 6, right: 6, ...F, fontSize: 9, color: C.text,
                           background: "rgba(0,0,0,0.75)", border: `1px solid ${C.border}`, borderRadius: 3,
-                          padding: "3px 8px", cursor: "pointer", letterSpacing: 1,
-                        }}>[ EXPAND ]</button>
+                          padding: "3px 8px", cursor: "pointer", letterSpacing: 1 }}>[ EXPAND ]</button>
                       </div>
                     )}
                     <div style={{ padding: "10px 12px" }}>
@@ -791,24 +987,25 @@ function DesignPage({ designs, decideDesign, activeAgent, onSelect, refresh, ent
           )
         }
       </div>
-      <AgentLog agentName="Design Agent" entries={entries} isActive={state === "running"} />
+      <AgentLog agentName="Riko" entries={entries} isActive={state === "running"} />
     </div>
   );
 }
 
-// ─── Listing page ─────────────────────────────────────────
+// ─── Listing / Snoopy page ─────────────────────────────────
 function ListingPage({ listings, activeAgent, onSelect, refresh, entries }) {
-  const state = activeAgent === "Listing Agent" ? "running" : listings.length > 0 ? "waiting" : "idle";
+  const state = activeAgent === "Snoopy" ? "running" : listings.length > 0 ? "waiting" : "idle";
   return (
     <div>
-      <AgentPageHeader CatComp={ListingCat} name="LISTING AGENT" sub="claude-haiku-4.5 — SEO writer & Etsy uploader" state={state}
+      <AgentPageHeader CatComp={ListingCat} name="SNOOPY" sub="claude-haiku-4.5 — SEO & Listing Copywriter" state={state}
         rightSlot={
           <GhostBtn onClick={() => deleteByStatus(["ready_to_upload"], refresh)} style={{ fontSize: 10, letterSpacing: 1 }}>
             [ CLEAR UPLOADED ]
           </GhostBtn>
         }
       />
-      <TermLine text={`${listings.length} listing${listings.length !== 1 ? "s" : ""} ready to upload`} color={state === "running" ? C.active : C.muted} />
+      <TermLine text={`${listings.length} listing${listings.length !== 1 ? "s" : ""} ready to upload`}
+        color={state === "running" ? C.active : C.muted} />
       <div style={{ padding: "20px 26px" }}>
         {listings.length === 0
           ? <EmptyState text="NO LISTINGS READY — APPROVE DESIGNS FIRST" />
@@ -818,8 +1015,7 @@ function ListingPage({ listings, activeAgent, onSelect, refresh, entries }) {
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))", gap: 12 }}>
                 {listings.map(l => (
                   <div key={l.id} onClick={() => onSelect(l)}
-                    style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, overflow: "hidden",
-                      cursor: "pointer", transition: "border-color 0.15s, box-shadow 0.15s" }}
+                    style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, overflow: "hidden", cursor: "pointer" }}
                     onMouseEnter={e => { e.currentTarget.style.borderColor = C.active; e.currentTarget.style.boxShadow = C.glow; }}
                     onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.boxShadow = "none"; }}>
                     {l.image_url && (
@@ -838,7 +1034,7 @@ function ListingPage({ listings, activeAgent, onSelect, refresh, entries }) {
                       <div style={{ ...F, fontSize: 9, color: C.muted, marginBottom: 8 }}>
                         {l.tags?.split(",").length || 0} tags
                       </div>
-                      <GreenBtn onClick={e => e.stopPropagation()} style={{ width: "100%", padding: "6px 0", fontSize: 10, letterSpacing: 1 }}>
+                      <GreenBtn onClick={e => e.stopPropagation()} style={{ width: "100%", padding: "6px 0", fontSize: 10 }}>
                         [ POST TO ETSY ]
                       </GreenBtn>
                     </div>
@@ -849,61 +1045,61 @@ function ListingPage({ listings, activeAgent, onSelect, refresh, entries }) {
           )
         }
       </div>
-      <AgentLog agentName="Listing Agent" entries={entries} isActive={state === "running"} />
+      <AgentLog agentName="Snoopy" entries={entries} isActive={state === "running"} />
     </div>
   );
 }
 
-// ─── Strategy page ────────────────────────────────────────
+// ─── Strategy placeholder ──────────────────────────────────
 function StrategyPage() {
   return (
-    <div style={{ padding: "24px 26px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "60vh" }}>
+    <div style={{ padding: "24px 26px", display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center", minHeight: "60vh" }}>
       <div style={{ opacity: 0.2, marginBottom: 20 }}><ListingCat color={C.active} size={60} /></div>
       <div style={{ ...F, fontSize: 18, color: C.muted, letterSpacing: 4, marginBottom: 10 }}>COMING SOON</div>
       <div style={{ ...F, fontSize: 11, color: "#334433", letterSpacing: 1, textAlign: "center", maxWidth: 320, lineHeight: 1.8 }}>
-        The Strategy Agent will analyze market trends and competitor data to suggest long-term positioning, seasonal opportunities, and pricing strategies.
+        The Strategy Agent will analyze market trends and competitor data to suggest long-term positioning.
       </div>
     </div>
   );
 }
 
-// ─── Feedback page ────────────────────────────────────────
+// ─── Feedback / Waffle page ────────────────────────────────
 function FeedbackPage({ entries }) {
   return (
     <div>
-      <AgentPageHeader CatComp={FeedbackCat} name="FEEDBACK AGENT" sub="claude-haiku-4.5 — Performance tracker & weekly recap" state="idle" />
+      <AgentPageHeader CatComp={FeedbackCat} name="WAFFLE" sub="Performance Tracker — coming soon" state="idle" />
       <TermLine text="No active tracking — 0 listings monitored" />
       <div style={{ padding: "20px 26px" }}>
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, padding: "12px 16px", marginBottom: 14 }}>
           <div style={{ ...F, fontSize: 10, color: C.muted }}>
             Next recap in <span style={{ color: C.text }}>6 days</span>
-            <span style={{ color: C.faint, marginLeft: 16 }}>{`// 0 listings tracked`}</span>
           </div>
         </div>
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6,
           padding: "60px 24px", textAlign: "center" }}>
           <div style={{ ...F, fontSize: 14, color: "#334433", letterSpacing: 3 }}>NO DATA YET</div>
-          <div style={{ ...F, fontSize: 10, color: "#222", marginTop: 8, letterSpacing: 1 }}>Requires active Etsy listings to populate charts</div>
+          <div style={{ ...F, fontSize: 10, color: "#222", marginTop: 8, letterSpacing: 1 }}>
+            Requires active Etsy listings to populate charts
+          </div>
         </div>
       </div>
-      <AgentLog agentName="Feedback Agent" entries={entries} isActive={false} />
+      <AgentLog agentName="Waffle" entries={entries} isActive={false} />
     </div>
   );
 }
 
-// ─── Pipeline Logs page ───────────────────────────────────
+// ─── Pipeline Logs ─────────────────────────────────────────
 function LogsPage({ logs }) {
   const statusColor = (s) => {
     if (s === "success") return { color: C.active, bg: "#001a0d", border: C.dim };
     if (s === "failed")  return { color: C.danger, bg: C.dangerDim, border: "#330000" };
     return { color: C.amber, bg: "#1a1000", border: "#332200" };
   };
-
   return (
     <div style={{ padding: "24px 26px" }}>
       <div style={{ ...F, fontSize: 14, color: C.active, letterSpacing: 2, marginBottom: 4 }}>PIPELINE LOGS</div>
       <div style={{ ...F, fontSize: 10, color: C.muted, marginBottom: 20 }}>All runs — newest first</div>
-
       {logs.length === 0 ? <EmptyState text="NO RUNS RECORDED YET" /> : (
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, overflow: "hidden" }}>
           <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 0.7fr 0.7fr 0.7fr 0.9fr",
@@ -924,8 +1120,8 @@ function LogsPage({ logs }) {
                 <div style={{ ...F, fontSize: 11, color: C.muted }}>{log.designs}</div>
                 <div style={{ ...F, fontSize: 11, color: C.muted }}>{log.listings}</div>
                 <span style={{ ...F, fontSize: 8, padding: "2px 7px", borderRadius: 3, letterSpacing: 1,
-                  textTransform: "uppercase", display: "inline-block", color: s.color,
-                  background: s.bg, border: `1px solid ${s.border}` }}>{log.status}</span>
+                  textTransform: "uppercase", display: "inline-block",
+                  color: s.color, background: s.bg, border: `1px solid ${s.border}` }}>{log.status}</span>
               </div>
             );
           })}
@@ -938,14 +1134,12 @@ function LogsPage({ logs }) {
 // ─── Snow Memory page ─────────────────────────────────────
 function MemoryPage({ memory }) {
   const [filter, setFilter] = useState("all");
-  const cats = ["all", ...Array.from(new Set(memory.map(m => m.category)))];
+  const cats  = ["all", ...Array.from(new Set(memory.map(m => m.category)))];
   const shown = filter === "all" ? memory : memory.filter(m => m.category === filter);
-
   return (
     <div style={{ padding: "24px 26px" }}>
       <div style={{ ...F, fontSize: 14, color: C.active, letterSpacing: 2, marginBottom: 4 }}>SNOW MEMORY</div>
-      <div style={{ ...F, fontSize: 10, color: C.muted, marginBottom: 20 }}>Observations stored across all pipeline runs</div>
-
+      <div style={{ ...F, fontSize: 10, color: C.muted, marginBottom: 20 }}>Observations across all pipeline runs</div>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 18 }}>
         {cats.map(cat => (
           <button key={cat} onClick={() => setFilter(cat)} style={{
@@ -958,7 +1152,6 @@ function MemoryPage({ memory }) {
           }}>{cat}</button>
         ))}
       </div>
-
       {shown.length === 0 ? <EmptyState text="NO ENTRIES" /> : (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {shown.map(m => (
@@ -975,7 +1168,7 @@ function MemoryPage({ memory }) {
   );
 }
 
-// ─── Modals ───────────────────────────────────────────────
+// ─── Modals ────────────────────────────────────────────────
 function DesignModal({ design, onClose, decideDesign }) {
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.94)",
@@ -1026,12 +1219,11 @@ function ListingModal({ listing, onClose }) {
   );
 }
 
-// ─── Lock screen ─────────────────────────────────────────
+// ─── Lock screen ───────────────────────────────────────────
 function LockScreen({ onUnlock }) {
   const [pw, setPw]       = useState("");
   const [error, setError] = useState(false);
   const inputRef          = useRef(null);
-
   useEffect(() => { inputRef.current?.focus(); }, []);
 
   const attempt = () => {
@@ -1047,97 +1239,50 @@ function LockScreen({ onUnlock }) {
   };
 
   return (
-    <div style={{
-      position: "fixed", inset: 0, background: C.bg,
-      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-      ...F,
-    }}>
-      {/* Scanlines overlay */}
-      <div style={{
-        position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0,
-        background: "repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,255,136,0.012) 3px, rgba(0,255,136,0.012) 4px)",
-      }} />
-
-      <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 0 }}>
-        {/* Cat */}
-        <div style={{
-          marginBottom: 28,
-          filter: "drop-shadow(0 0 18px #00ff8866)",
-          animation: "floatCat 4s ease-in-out infinite",
-        }}>
+    <div style={{ position: "fixed", inset: 0, background: C.bg,
+      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", ...F }}>
+      <div style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0,
+        background: "repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,255,136,0.012) 3px, rgba(0,255,136,0.012) 4px)" }} />
+      <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center" }}>
+        <div style={{ marginBottom: 28, filter: "drop-shadow(0 0 18px #00ff8866)", animation: "floatCat 4s ease-in-out infinite" }}>
           <LoafCat color={C.active} size={72} />
         </div>
-
-        {/* Title */}
-        <div style={{ fontSize: 22, fontWeight: 700, color: C.active, letterSpacing: 4, marginBottom: 6 }}>
-          PROJECTSNOW
-        </div>
-        <div style={{ fontSize: 10, color: C.muted, letterSpacing: 3, marginBottom: 40 }}>
-          AGENT OPS v0.1
-        </div>
-
-        {/* Input */}
+        <div style={{ fontSize: 22, fontWeight: 700, color: C.active, letterSpacing: 4, marginBottom: 6 }}>PROJECTSNOW</div>
+        <div style={{ fontSize: 10, color: C.muted, letterSpacing: 3, marginBottom: 40 }}>AGENT OPS v2.0</div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <input
-            ref={inputRef}
-            type="password"
-            value={pw}
+          <input ref={inputRef} type="password" value={pw}
             onChange={e => setPw(e.target.value)}
             onKeyDown={e => e.key === "Enter" && attempt()}
             placeholder="password"
-            style={{
-              ...F, background: "#050505",
-              border: `1px solid ${error ? C.danger : C.active}`,
+            style={{ ...F, background: "#050505", border: `1px solid ${error ? C.danger : C.active}`,
               borderRadius: 4, padding: "8px 14px", color: C.text, fontSize: 12,
               width: 220, outline: "none", caretColor: C.active, letterSpacing: 2,
-              boxShadow: error ? `0 0 10px ${C.danger}44` : `0 0 10px ${C.active}22`,
-              transition: "border-color 0.2s, box-shadow 0.2s",
-            }}
-          />
-          <button onClick={attempt} style={{
-            ...F, background: "transparent", color: C.active,
-            border: `1px solid ${C.active}`, borderRadius: 4,
-            padding: "8px 18px", fontSize: 11, cursor: "pointer",
-            letterSpacing: 1.5, boxShadow: `0 0 8px ${C.active}33`,
-            transition: "box-shadow 0.15s",
-          }}
-            onMouseEnter={e => e.currentTarget.style.boxShadow = `0 0 16px ${C.active}66`}
-            onMouseLeave={e => e.currentTarget.style.boxShadow = `0 0 8px ${C.active}33`}
-          >[ ENTER ]</button>
+              boxShadow: error ? `0 0 10px ${C.danger}44` : `0 0 10px ${C.active}22` }} />
+          <button onClick={attempt} style={{ ...F, background: "transparent", color: C.active,
+            border: `1px solid ${C.active}`, borderRadius: 4, padding: "8px 18px",
+            fontSize: 11, cursor: "pointer", letterSpacing: 1.5 }}>[ ENTER ]</button>
         </div>
-
-        {/* Error */}
-        <div style={{
-          marginTop: 16, ...F, fontSize: 11, letterSpacing: 2,
-          color: C.danger, height: 18,
-          opacity: error ? 1 : 0, transition: "opacity 0.15s",
-          textShadow: `0 0 8px ${C.danger}`,
-        }}>ACCESS DENIED</div>
+        <div style={{ marginTop: 16, ...F, fontSize: 11, letterSpacing: 2, color: C.danger,
+          height: 18, opacity: error ? 1 : 0 }}>ACCESS DENIED</div>
       </div>
-
-      <style>{`
-        @keyframes floatCat {
-          0%,100% { transform: translateY(0px); }
-          50%      { transform: translateY(-8px); }
-        }
-      `}</style>
+      <style>{`@keyframes floatCat { 0%,100% { transform: translateY(0px); } 50% { transform: translateY(-8px); } }`}</style>
     </div>
   );
 }
 
-// ─── Page title map ───────────────────────────────────────
+// ─── Page titles ───────────────────────────────────────────
 const PAGE_TITLES = {
-  overview: "OVERVIEW",
-  research: "RESEARCH AGENT",
-  design:   "DESIGN AGENT",
-  strategy: "STRATEGY AGENT",
-  listing:  "LISTING AGENT",
-  feedback: "FEEDBACK AGENT",
+  overview: "SNOW — AGENT MANAGER",
+  research: "LEON — RESEARCH",
+  design:   "RIKO — DESIGN",
+  strategy: "STRATEGY",
+  listing:  "SNOOPY — LISTING",
+  feedback: "WAFFLE — FEEDBACK",
   logs:     "PIPELINE LOGS",
   memory:   "SNOW MEMORY",
 };
 
-// ─── Root ─────────────────────────────────────────────────
+// ─── Root ──────────────────────────────────────────────────
 export default function Dashboard() {
   const [unlocked, setUnlocked] = useState(
     () => !!localStorage.getItem("projectsnow_unlocked")
@@ -1146,24 +1291,29 @@ export default function Dashboard() {
   const { proposals, decide } = useProposals();
   const { designs, decideDesign } = useDesigns();
   const { listings } = useReadyListings();
-  const { report } = useSnowReport();
   const { status: pipelineStatus } = usePipelineStatus();
   const { logs } = usePipelineLogs();
   const { memory } = useSnowMemory();
 
   const [activePage, setActivePage] = useState("overview");
-  const [keywords, setKeywords] = useState("");
-  const [launching, setLaunching] = useState(false);
-  const [selectedDesign, setSelectedDesign] = useState(null);
+  const [keywords, setKeywords]     = useState("");
+  const [launching, setLaunching]   = useState(false);
+  const [selectedDesign, setSelectedDesign]   = useState(null);
   const [selectedListing, setSelectedListing] = useState(null);
 
   const activeAgent = pipelineStatus?.active_agent;
-  const isRunning = pipelineStatus?.running;
+  const isRunning   = pipelineStatus?.running;
   const pipelineStep = pipelineStatus?.status;
 
   const activityEntries = useActivityLog(pipelineStatus, logs);
 
-  const agentNameToPage = { "Research Agent": "research", "Design Agent": "design", "Listing Agent": "listing", "Feedback Agent": "feedback" };
+  // Map pipeline agent names to sidebar page ids
+  const agentNameToPage = {
+    "Leon": "research", "Riko": "design",
+    "Snoopy": "listing", "Waffle": "feedback",
+    "Research Agent": "research", "Design Agent": "design",
+    "Listing Agent": "listing", "Feedback Agent": "feedback",
+  };
   const agentStates = Object.fromEntries(
     Object.keys(PAGE_TITLES).map(id => {
       const agentName = Object.keys(agentNameToPage).find(k => agentNameToPage[k] === id);
@@ -1181,29 +1331,25 @@ export default function Dashboard() {
 
   const callEndpoint = async (url) => {
     setLaunching(true);
-    try { await fetch(url, { method: "POST" }); } catch (e) {}
+    try { await fetch(url, { method: "POST" }); } catch (_) {}
     setTimeout(() => setLaunching(false), 2000);
   };
 
-  const launch   = () => callEndpoint(`http://localhost:8000/launch?keywords=${encodeURIComponent(keywords)}`);
-  const runStep2 = () => callEndpoint("http://localhost:8000/step2");
-  const runStep3 = () => callEndpoint("http://localhost:8000/step3");
-
-  const noop = () => {};
+  const launch   = () => callEndpoint(`${API}/launch?keywords=${encodeURIComponent(keywords)}`);
+  const runStep2 = () => callEndpoint(`${API}/step2`);
+  const runStep3 = () => callEndpoint(`${API}/step3`);
 
   if (!unlocked) return <LockScreen onUnlock={() => setUnlocked(true)} />;
 
   return (
     <div style={{ display: "flex", height: "100vh", background: C.bg, color: C.text, overflow: "hidden" }}>
-
       <Sidebar active={activePage} setActive={setActivePage} agentStates={agentStates} counts={counts} />
 
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-
         {/* Header */}
         <div style={{ height: 48, borderBottom: `1px solid ${C.border}`, display: "flex",
           alignItems: "center", gap: 14, padding: "0 20px", flexShrink: 0, background: C.bg }}>
-          <span style={{ ...F, fontSize: 12, color: C.active, letterSpacing: 2, minWidth: 160 }}>
+          <span style={{ ...F, fontSize: 12, color: C.active, letterSpacing: 2, minWidth: 200 }}>
             {PAGE_TITLES[activePage] || "OVERVIEW"}
           </span>
           <div style={{ width: 1, height: 18, background: C.border }} />
@@ -1217,7 +1363,6 @@ export default function Dashboard() {
             onBlur={e => e.target.style.borderColor = C.border}
           />
           {isRunning ? (
-            // Pipeline actively running — disable all actions
             <GhostBtn disabled style={{ fontSize: 11, letterSpacing: 1,
               animation: "pulse 1.4s ease-in-out infinite", borderColor: C.active + "44", color: C.muted }}>
               [ GO NAP ]
@@ -1225,30 +1370,15 @@ export default function Dashboard() {
           ) : launching ? (
             <GhostBtn disabled style={{ fontSize: 11, letterSpacing: 1, color: C.muted }}>LAUNCHING...</GhostBtn>
           ) : pipelineStep === "waiting_approval" ? (
-            // Step 1 done — user approved proposals in dashboard, ready to generate designs
             <button onClick={runStep2} style={{ ...F, fontSize: 11, letterSpacing: 1, cursor: "pointer",
               background: "transparent", color: C.amber, border: `1px solid ${C.amber}88`,
-              borderRadius: 4, padding: "5px 14px",
-              boxShadow: "0 0 8px rgba(255,187,68,0.25)" }}
-              onMouseEnter={e => e.currentTarget.style.boxShadow = "0 0 14px rgba(255,187,68,0.45)"}
-              onMouseLeave={e => e.currentTarget.style.boxShadow = "0 0 8px rgba(255,187,68,0.25)"}>
-              [ RUN DESIGN ]
-            </button>
+              borderRadius: 4, padding: "5px 14px" }}>[ RUN RIKO ]</button>
           ) : pipelineStep === "waiting_review" ? (
-            // Step 2 done — user approved designs in dashboard, ready to write listings
             <button onClick={runStep3} style={{ ...F, fontSize: 11, letterSpacing: 1, cursor: "pointer",
               background: "transparent", color: C.cyan, border: `1px solid ${C.cyan}88`,
-              borderRadius: 4, padding: "5px 14px",
-              boxShadow: "0 0 8px rgba(68,221,255,0.25)" }}
-              onMouseEnter={e => e.currentTarget.style.boxShadow = "0 0 14px rgba(68,221,255,0.45)"}
-              onMouseLeave={e => e.currentTarget.style.boxShadow = "0 0 8px rgba(68,221,255,0.25)"}>
-              [ RUN LISTING ]
-            </button>
+              borderRadius: 4, padding: "5px 14px" }}>[ RUN SNOOPY ]</button>
           ) : (
-            // No status, status="complete", or any unknown state — start fresh
-            <GreenBtn onClick={launch} style={{ fontSize: 11, letterSpacing: 1 }}>
-              [ GO WORK ]
-            </GreenBtn>
+            <GreenBtn onClick={launch} style={{ fontSize: 11, letterSpacing: 1 }}>[ GO WORK ]</GreenBtn>
           )}
           {isRunning && (
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -1265,13 +1395,13 @@ export default function Dashboard() {
           ))}
         </div>
 
-        {/* Status banner */}
+        {/* Status banners */}
         {!isRunning && pipelineStep === "waiting_approval" && (
           <div style={{ padding: "7px 20px", background: "#1a1200", borderBottom: `1px solid ${C.amber}44`,
             display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
             <StatusDot state="waiting" />
             <span style={{ ...F, fontSize: 10, color: C.amber, letterSpacing: 1.5 }}>
-              WAITING — {proposals.filter(p => p.status === "pending").length} PROPOSAL{proposals.filter(p => p.status === "pending").length !== 1 ? "S" : ""} NEED YOUR APPROVAL
+              WAITING — {proposals.filter(p => p.status === "pending").length} PROPOSALS NEED YOUR APPROVAL — GO TO LEON
             </span>
           </div>
         )}
@@ -1280,7 +1410,7 @@ export default function Dashboard() {
             display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
             <StatusDot state="running" />
             <span style={{ ...F, fontSize: 10, color: C.cyan, letterSpacing: 1.5 }}>
-              WAITING — {designs.length} DESIGN{designs.length !== 1 ? "S" : ""} NEED YOUR REVIEW
+              WAITING — {designs.length} DESIGNS NEED YOUR REVIEW — GO TO RIKO
             </span>
           </div>
         )}
@@ -1289,18 +1419,18 @@ export default function Dashboard() {
             display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
             <StatusDot state="running" />
             <span style={{ ...F, fontSize: 10, color: C.active, letterSpacing: 1.5 }}>
-              STEP 3 COMPLETE — CHECK LISTINGS
+              STEP 3 COMPLETE — CHECK SNOOPY'S LISTINGS
             </span>
           </div>
         )}
 
         {/* Page content */}
         <div style={{ flex: 1, overflowY: "auto" }}>
-          {activePage === "overview"  && <OverviewPage report={report} pipelineStatus={pipelineStatus} proposals={proposals} designs={designs} listings={listings} memory={memory} entries={activityEntries} />}
-          {activePage === "research"  && <ResearchPage proposals={proposals} decide={decide} activeAgent={activeAgent} refresh={noop} entries={activityEntries} />}
-          {activePage === "design"    && <DesignPage designs={designs} decideDesign={decideDesign} activeAgent={activeAgent} onSelect={setSelectedDesign} refresh={noop} entries={activityEntries} />}
+          {activePage === "overview"  && <OverviewPage setActive={setActivePage} />}
+          {activePage === "research"  && <ResearchPage proposals={proposals} decide={decide} activeAgent={activeAgent} refresh={() => {}} entries={activityEntries} />}
+          {activePage === "design"    && <DesignPage designs={designs} decideDesign={decideDesign} activeAgent={activeAgent} onSelect={setSelectedDesign} refresh={() => {}} entries={activityEntries} />}
           {activePage === "strategy"  && <StrategyPage />}
-          {activePage === "listing"   && <ListingPage listings={listings} activeAgent={activeAgent} onSelect={setSelectedListing} refresh={noop} entries={activityEntries} />}
+          {activePage === "listing"   && <ListingPage listings={listings} activeAgent={activeAgent} onSelect={setSelectedListing} refresh={() => {}} entries={activityEntries} />}
           {activePage === "feedback"  && <FeedbackPage entries={activityEntries} />}
           {activePage === "logs"      && <LogsPage logs={logs} />}
           {activePage === "memory"    && <MemoryPage memory={memory} />}
@@ -1314,18 +1444,8 @@ export default function Dashboard() {
         * { box-sizing: border-box; }
         body { margin: 0; background: ${C.bg}; }
         body::before {
-          content: '';
-          position: fixed;
-          inset: 0;
-          pointer-events: none;
-          z-index: 9999;
-          background: repeating-linear-gradient(
-            0deg,
-            transparent,
-            transparent 3px,
-            rgba(0,255,136,0.012) 3px,
-            rgba(0,255,136,0.012) 4px
-          );
+          content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 9999;
+          background: repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,255,136,0.012) 3px, rgba(0,255,136,0.012) 4px);
         }
         ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
@@ -1335,6 +1455,7 @@ export default function Dashboard() {
         @keyframes pulse    { 0%,100%{opacity:1} 50%{opacity:0.35} }
         @keyframes blink    { 0%,100%{opacity:1} 50%{opacity:0} }
         @keyframes termEntry { from{opacity:0;transform:translateY(3px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes floatCat { 0%,100% { transform: translateY(0px); } 50% { transform: translateY(-8px); } }
       `}</style>
     </div>
   );
