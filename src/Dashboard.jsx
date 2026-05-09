@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
-  usePackages, useReadyListings,
+  usePackages,
   usePipelineStatus, usePipelineLogs, useSnowMemory, useSnowChat
 } from "./useAirtable";
 
@@ -30,11 +30,6 @@ const BASE_ID  = "appsS6oYAVqgJhe7H";
 const TABLE_ID = "tblIyWuFysf5Hxu8u";
 const atHeaders = () => ({ Authorization: `Bearer ${process.env.REACT_APP_AIRTABLE_API_KEY}` });
 
-async function airtableDeleteRecord(id) {
-  await fetch(`https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}?records[]=${id}`, {
-    method: "DELETE", headers: atHeaders(),
-  });
-}
 
 // ─── Cat SVGs ──────────────────────────────────────────────
 const LoafCat = ({ color = C.snow, size = 40 }) => (
@@ -455,7 +450,6 @@ function RoomsView({ agentsStatus, pendingPackages, listings, setActive }) {
   const riko   = agentsStatus.find(a => a.name === "Riko");
   const snoopy = agentsStatus.find(a => a.name === "Snoopy");
   const waffle = agentsStatus.find(a => a.name === "Waffle");
-  const metricVal = (ag, key) => { const v = ag?.metrics?.[key]; return v?.length ? v[v.length - 1] : null; };
 
   return (
     <div style={{ padding: "0 0 4px" }}>
