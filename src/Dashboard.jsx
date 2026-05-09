@@ -4,7 +4,7 @@ import {
   usePipelineStatus, usePipelineLogs, useSnowMemory, useSnowChat
 } from "./useAirtable";
 
-// ─── Design tokens — Cyberpunk City Night ─────────────────
+// ─── Design tokens ────────────────────────────────────────
 const C = {
   bg:         "#080810",
   card:       "#0d0d1a",
@@ -30,42 +30,27 @@ const BASE_ID  = "appsS6oYAVqgJhe7H";
 const TABLE_ID = "tblIyWuFysf5Hxu8u";
 const atHeaders = () => ({ Authorization: `Bearer ${process.env.REACT_APP_AIRTABLE_API_KEY}` });
 
-async function deleteByStatus(statuses, onDone) {
-  const formula = encodeURIComponent(`OR(${statuses.map(s => `{status}="${s}"`).join(",")})`);
-  const res  = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}?filterByFormula=${formula}`, { headers: atHeaders() });
-  const data = await res.json();
-  const ids  = (data.records || []).map(r => r.id);
-  if (!ids.length) return;
-  for (let i = 0; i < ids.length; i += 10) {
-    const params = ids.slice(i, i + 10).map(id => `records[]=${id}`).join("&");
-    await fetch(`https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}?${params}`, { method: "DELETE", headers: atHeaders() });
-  }
-  onDone?.();
+async function airtableDeleteRecord(id) {
+  await fetch(`https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}?records[]=${id}`, {
+    method: "DELETE", headers: atHeaders(),
+  });
 }
 
 // ─── Cat SVGs ──────────────────────────────────────────────
 const LoafCat = ({ color = C.snow, size = 40 }) => (
   <svg width={size} height={size} viewBox="0 0 60 60" fill="none">
-    {/* Ears */}
     <polygon points="7,22 3,6 19,18" fill={color} />
     <polygon points="53,22 57,6 41,18" fill={color} />
-    {/* Inner ears */}
     <polygon points="9,20 6,9 17,17" fill={C.bg} opacity="0.25" />
     <polygon points="51,20 54,9 43,17" fill={C.bg} opacity="0.25" />
-    {/* Face */}
     <circle cx="30" cy="34" r="22" fill={color} />
-    {/* Sleepy eyes */}
     <path d="M18,29 Q22,25 26,29" stroke={C.bg} strokeWidth="2.2" fill="none" strokeLinecap="round" />
     <path d="M34,29 Q38,25 42,29" stroke={C.bg} strokeWidth="2.2" fill="none" strokeLinecap="round" />
-    {/* Nose */}
     <polygon points="30,35 27.5,33 32.5,33" fill={C.bg} opacity="0.6" />
-    {/* Mouth */}
     <path d="M27.5,37 Q30,40 32.5,37" stroke={C.bg} strokeWidth="1.4" fill="none" strokeLinecap="round" opacity="0.5" />
-    {/* Whiskers left */}
     <line x1="5"  y1="35" x2="22" y2="36" stroke={C.bg} strokeWidth="1.1" opacity="0.35" strokeLinecap="round" />
     <line x1="5"  y1="39" x2="22" y2="39" stroke={C.bg} strokeWidth="1.1" opacity="0.35" strokeLinecap="round" />
     <line x1="6"  y1="43" x2="22" y2="42" stroke={C.bg} strokeWidth="1.1" opacity="0.35" strokeLinecap="round" />
-    {/* Whiskers right */}
     <line x1="55" y1="35" x2="38" y2="36" stroke={C.bg} strokeWidth="1.1" opacity="0.35" strokeLinecap="round" />
     <line x1="55" y1="39" x2="38" y2="39" stroke={C.bg} strokeWidth="1.1" opacity="0.35" strokeLinecap="round" />
     <line x1="54" y1="43" x2="38" y2="42" stroke={C.bg} strokeWidth="1.1" opacity="0.35" strokeLinecap="round" />
@@ -253,6 +238,41 @@ function useLastMeeting() {
   return meeting;
 }
 
+// Fetches all production packages with all fields (including new: mockup_url, snow_brief, etc.)
+function useAllProductionPackages() {
+  const [allPackages, setAllPackages] = useState([]);
+  const fetch_ = useCallback(async () => {
+    try {
+      const formula = encodeURIComponent('OR({status}="pending_review",{status}="strategy_review",{status}="approved_for_listing",{status}="ready_to_upload",{status}="rejected")');
+      const res = await fetch(
+        `https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}?filterByFormula=${formula}&sort[0][field]=created_at&sort[0][direction]=asc`,
+        { headers: atHeaders() }
+      );
+      const data = await res.json();
+      setAllPackages((data.records || []).map(r => ({
+        id:               r.id,
+        title:            r.fields.title            || "",
+        niche:            r.fields.niche            || "",
+        keyword:          r.fields.keyword          || "",
+        why_it_sells:     r.fields.why_it_sells     || "",
+        image_url:        r.fields.image_url        || "",
+        mockup_url:       r.fields.mockup_url       || "",
+        image_prompt:     r.fields.image_prompt     || "",
+        snow_brief:       r.fields.snow_brief       || "",
+        suggested_price:  r.fields.suggested_price  || "",
+        rejection_reason: r.fields.rejection_reason || "",
+        price:            r.fields.price            || "",
+        tags:             r.fields.tags             || "",
+        description:      r.fields.description      || "",
+        status:           r.fields.status           || "",
+        created_at:       r.fields.created_at       || "",
+      })));
+    } catch (_) {}
+  }, []);
+  useEffect(() => { fetch_(); const t = setInterval(fetch_, 10000); return () => clearInterval(t); }, [fetch_]);
+  return { allPackages, refresh: fetch_ };
+}
+
 // ─── Sidebar ───────────────────────────────────────────────
 function Sidebar({ active, setActive, counts, agentDots }) {
   const navItem = (id, icon, label, accent = C.accent, badge = 0, dot = null) => {
@@ -262,8 +282,7 @@ function Sidebar({ active, setActive, counts, agentDots }) {
         ...F, width: "100%", display: "flex", alignItems: "center", gap: 10,
         background: isActive ? `${accent}11` : "transparent",
         border: "none", borderLeft: `3px solid ${isActive ? accent : "transparent"}`,
-        padding: "0 12px 0 9px", height: 44, cursor: "pointer",
-        transition: "all 0.15s", textAlign: "left",
+        padding: "0 12px 0 9px", height: 44, cursor: "pointer", transition: "all 0.15s", textAlign: "left",
       }}
         onMouseEnter={e => { if (!isActive) { e.currentTarget.style.background = `${accent}09`; e.currentTarget.style.borderLeftColor = `${accent}44`; } }}
         onMouseLeave={e => { if (!isActive) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderLeftColor = "transparent"; } }}
@@ -287,8 +306,6 @@ function Sidebar({ active, setActive, counts, agentDots }) {
   return (
     <div style={{ width: 200, flexShrink: 0, background: C.bg, borderRight: `1px solid ${C.border}`,
       display: "flex", flexDirection: "column", height: "100vh", position: "sticky", top: 0, overflowY: "auto" }}>
-
-      {/* Logo */}
       <div style={{ padding: "16px 12px 12px", borderBottom: `1px solid ${C.border}` }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <LoafCat color={C.snow} size={26} />
@@ -298,15 +315,14 @@ function Sidebar({ active, setActive, counts, agentDots }) {
           </div>
         </div>
       </div>
-
       <div style={{ flex: 1, paddingTop: 4 }}>
         {groupLabel("Command")}
         {navItem("overview", "❄️", "Snow", C.snow)}
 
         {groupLabel("Production Floor")}
-        {navItem("review",   "📋", "Review",  C.amber,   counts.review,  agentDots.review)}
-        {navItem("listing",  "📤", "Snoopy",  C.cyan,    counts.listing, agentDots.snoopy)}
-        {navItem("feedback", "📊", "Waffle",  C.danger,  0,              agentDots.waffle)}
+        {navItem("review",        "📋", "Review Room",    C.amber,   counts.review,        agentDots.review)}
+        {navItem("ready_to_post", "✅", "Ready To Post",  C.success, counts.ready_to_post, agentDots.snoopy)}
+        {navItem("feedback",      "📊", "Waffle",         C.danger,  0,                    agentDots.waffle)}
 
         {groupLabel("Intelligence")}
         {navItem("logs",   "📜", "Pipeline Logs", C.accent)}
@@ -314,7 +330,7 @@ function Sidebar({ active, setActive, counts, agentDots }) {
 
         {groupLabel("Future Agents")}
         {[0,1,2].map(i => (
-          <div key={i} style={{ padding: "0 12px 0 12px", height: 40, display: "flex", alignItems: "center", opacity: 0.2 }}>
+          <div key={i} style={{ padding: "0 12px", height: 40, display: "flex", alignItems: "center", opacity: 0.2 }}>
             <span style={{ ...F, fontSize: 10, color: C.muted, letterSpacing: 1 }}>+ AGENT SLOT</span>
           </div>
         ))}
@@ -323,7 +339,7 @@ function Sidebar({ active, setActive, counts, agentDots }) {
   );
 }
 
-// ─── Chat column ───────────────────────────────────────────
+// ─── Snow Chat ─────────────────────────────────────────────
 const fmtTime = (ts) => { if (!ts) return ""; const d = new Date(ts); return isNaN(d) ? "" : d.toTimeString().slice(0, 5); };
 
 function SnowChat() {
@@ -359,19 +375,18 @@ function SnowChat() {
         <span style={{ ...F, fontSize: 10, color: C.snow, letterSpacing: 2 }}>DIRECT LINE — SNOW</span>
         <span style={{ ...F, fontSize: 8, color: C.muted, marginLeft: "auto" }}>opus-4.6</span>
       </div>
-
       <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "12px 12px 6px",
-        display: "flex", flexDirection: "column", gap: 10, background: `${C.bg}` }}>
+        display: "flex", flexDirection: "column", gap: 10, background: C.bg }}>
         {messages.length === 0 && !sending && (
           <div style={{ ...F, fontSize: 9, color: C.muted, textAlign: "center", marginTop: 80, letterSpacing: 1 }}>
-            NO MESSAGES YET — SAY SOMETHING TO SNOW
+            NO MESSAGES YET
           </div>
         )}
         {messages.map((m, i) => m.role === "user" ? (
           <div key={i} style={{ display: "flex", justifyContent: "flex-end", gap: 6, alignItems: "flex-end" }}>
             <span style={{ ...F, fontSize: 7, color: C.muted }}>{fmtTime(m.timestamp)}</span>
             <div>
-              <div style={{ ...F, fontSize: 7, color: C.muted, textAlign: "right", marginBottom: 3, letterSpacing: 1 }}>YOU</div>
+              <div style={{ ...F, fontSize: 7, color: C.muted, textAlign: "right", marginBottom: 3 }}>YOU</div>
               <div style={{ ...F, fontSize: 11, color: C.text, background: `${C.accent}18`,
                 border: `1px solid ${C.accent}33`, borderRadius: "6px 6px 2px 6px",
                 padding: "7px 10px", maxWidth: 260, lineHeight: 1.6, wordBreak: "break-word" }}>{m.text}</div>
@@ -381,7 +396,7 @@ function SnowChat() {
           <div key={i} style={{ display: "flex", gap: 6, alignItems: "flex-start" }}>
             <div style={{ flexShrink: 0, marginTop: 16 }}><LoafCat color={C.snow} size={18} /></div>
             <div>
-              <div style={{ ...F, fontSize: 7, color: C.muted, marginBottom: 3, letterSpacing: 1 }}>
+              <div style={{ ...F, fontSize: 7, color: C.muted, marginBottom: 3 }}>
                 SNOW <span style={{ color: `${C.muted}88` }}>{fmtTime(m.timestamp)}</span>
               </div>
               <div style={{ ...F, fontSize: 11, color: C.text, background: C.card,
@@ -394,12 +409,11 @@ function SnowChat() {
         {sending && (
           <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
             <LoafCat color={C.muted} size={18} />
-            <span style={{ ...F, fontSize: 9, color: C.muted, letterSpacing: 1.5, animation: "blink 1s step-end infinite" }}>THINKING...</span>
+            <span style={{ ...F, fontSize: 9, color: C.muted, animation: "blink 1s step-end infinite" }}>THINKING...</span>
           </div>
         )}
       </div>
-
-      <div style={{ padding: "8px 10px", borderTop: `1px solid ${C.border}`, display: "flex", gap: 6, alignItems: "center" }}>
+      <div style={{ padding: "8px 10px", borderTop: `1px solid ${C.border}`, display: "flex", gap: 6 }}>
         <input value={input} onChange={e => setInput(e.target.value)}
           onKeyDown={e => e.key === "Enter" && !sending && send()}
           placeholder="Message Snow..."
@@ -416,15 +430,13 @@ function SnowChat() {
   );
 }
 
-// ─── 4 Rooms (Production Floor) ───────────────────────────
-function Room({ accent, children, onClick, style: ex = {} }) {
-  const ref = useRef(null);
+// ─── Rooms (production floor) ──────────────────────────────
+function Room({ accent, children, onClick }) {
   return (
-    <div ref={ref} onClick={onClick} style={{
+    <div onClick={onClick} style={{
       background: C.card, border: `1px solid ${C.roomBorder}`,
       borderLeft: `4px solid ${accent}`, borderRadius: 12, padding: 16,
-      cursor: onClick ? "pointer" : "default", transition: "all 0.2s",
-      marginBottom: 10, ...ex,
+      cursor: onClick ? "pointer" : "default", transition: "all 0.2s", marginBottom: 10,
     }}
       onMouseEnter={e => { if (onClick) { e.currentTarget.style.borderColor = accent; e.currentTarget.style.boxShadow = `0 0 14px ${accent}22`; } }}
       onMouseLeave={e => { e.currentTarget.style.borderColor = C.roomBorder; e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.borderLeftColor = accent; }}
@@ -438,130 +450,84 @@ function RoomLabel({ text, color = C.muted }) {
   return <div style={{ ...F, fontSize: 7, letterSpacing: 2, textTransform: "uppercase", color, marginBottom: 10 }}>{text}</div>;
 }
 
-function RoomsView({ agentsStatus, packages, listings, setActive }) {
+function RoomsView({ agentsStatus, pendingPackages, listings, setActive }) {
   const leon   = agentsStatus.find(a => a.name === "Leon");
   const riko   = agentsStatus.find(a => a.name === "Riko");
   const snoopy = agentsStatus.find(a => a.name === "Snoopy");
   const waffle = agentsStatus.find(a => a.name === "Waffle");
-
-  const metricVal = (agent, key) => {
-    const vals = agent?.metrics?.[key];
-    if (!vals || !vals.length) return null;
-    return vals[vals.length - 1];
-  };
+  const metricVal = (ag, key) => { const v = ag?.metrics?.[key]; return v?.length ? v[v.length - 1] : null; };
 
   return (
-    <div style={{ padding: "18px 20px" }}>
-
+    <div style={{ padding: "0 0 4px" }}>
       {/* Room 1 — Leon + Riko */}
       <Room accent={C.accent} onClick={() => setActive("review")}>
         <RoomLabel text="Production Lab" color={C.accent} />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-          {/* Leon */}
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-              <ResearchCat color={C.accent} size={26} />
+              <ResearchCat color={C.accent} size={24} />
               <div>
-                <div style={{ ...F, fontSize: 11, fontWeight: 700, color: C.accent, letterSpacing: 1.5 }}>LEON</div>
-                <div style={{ ...F, fontSize: 8, color: C.muted }}>MARKET RESEARCH</div>
+                <div style={{ ...F, fontSize: 10, fontWeight: 700, color: C.accent, letterSpacing: 1.2 }}>LEON</div>
+                <div style={{ ...F, fontSize: 7, color: C.muted }}>RESEARCH</div>
               </div>
               <StatusDot color={agentDotColor(leon)} />
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-              <div>
-                <div style={{ ...F, fontSize: 7, color: C.muted, letterSpacing: 1, marginBottom: 2 }}>RUNS</div>
-                <div style={{ ...F, fontSize: 18, fontWeight: 700, color: C.text }}>{leon?.run_count || 0}</div>
-              </div>
-              <div>
-                <div style={{ ...F, fontSize: 7, color: C.muted, letterSpacing: 1, marginBottom: 2 }}>IDEAS/RUN</div>
-                <div style={{ ...F, fontSize: 18, fontWeight: 700, color: C.text }}>
-                  {metricVal(leon, "proposals_per_run") ?? "—"}
-                </div>
-              </div>
-            </div>
-            <div style={{ ...F, fontSize: 8, color: C.muted, marginTop: 6 }}>
-              last: {leon?.last_run?.run_date ? String(leon.last_run.run_date).slice(0, 10) : "never"}
-            </div>
+            <div style={{ ...F, fontSize: 16, fontWeight: 700, color: C.text }}>{leon?.run_count || 0}</div>
+            <div style={{ ...F, fontSize: 7, color: C.muted, marginTop: 2 }}>total runs · last: {leon?.last_run?.run_date ? String(leon.last_run.run_date).slice(0, 10) : "never"}</div>
           </div>
-
-          {/* Riko */}
           <div style={{ borderLeft: `1px solid ${C.border}`, paddingLeft: 14 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-              <DesignCat color={C.accent} size={26} />
+              <DesignCat color={C.accent} size={24} />
               <div>
-                <div style={{ ...F, fontSize: 11, fontWeight: 700, color: C.accent, letterSpacing: 1.5 }}>RIKO</div>
-                <div style={{ ...F, fontSize: 8, color: C.muted }}>VISUAL DESIGN</div>
+                <div style={{ ...F, fontSize: 10, fontWeight: 700, color: C.accent, letterSpacing: 1.2 }}>RIKO</div>
+                <div style={{ ...F, fontSize: 7, color: C.muted }}>DESIGN</div>
               </div>
               <StatusDot color={agentDotColor(riko)} />
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-              <div>
-                <div style={{ ...F, fontSize: 7, color: C.muted, letterSpacing: 1, marginBottom: 2 }}>RUNS</div>
-                <div style={{ ...F, fontSize: 18, fontWeight: 700, color: C.text }}>{riko?.run_count || 0}</div>
-              </div>
-              <div>
-                <div style={{ ...F, fontSize: 7, color: C.muted, letterSpacing: 1, marginBottom: 2 }}>IMAGES</div>
-                <div style={{ ...F, fontSize: 18, fontWeight: 700, color: C.text }}>
-                  {metricVal(riko, "images_per_run") ?? "—"}
-                </div>
-              </div>
-            </div>
-            <div style={{ ...F, fontSize: 8, color: C.muted, marginTop: 6 }}>
-              last: {riko?.last_run?.run_date ? String(riko.last_run.run_date).slice(0, 10) : "never"}
-            </div>
+            <div style={{ ...F, fontSize: 16, fontWeight: 700, color: C.text }}>{riko?.run_count || 0}</div>
+            <div style={{ ...F, fontSize: 7, color: C.muted, marginTop: 2 }}>images · last: {riko?.last_run?.run_date ? String(riko.last_run.run_date).slice(0, 10) : "never"}</div>
           </div>
         </div>
       </Room>
 
-      {/* Room 2 — Review */}
+      {/* Room 2 — Review Room */}
       <Room accent={C.amber} onClick={() => setActive("review")}>
         <RoomLabel text="Review Room" color={C.amber} />
-        {packages.length > 0 ? (
-          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            {packages[0]?.image_url && (
-              <img src={packages[0].image_url} alt="" style={{ width: 56, height: 72, objectFit: "cover", borderRadius: 6, flexShrink: 0 }} />
+        {pendingPackages.length > 0 ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {(pendingPackages[0]?.mockup_url || pendingPackages[0]?.image_url) && (
+              <img src={pendingPackages[0].mockup_url || pendingPackages[0].image_url} alt=""
+                style={{ width: 56, height: 72, objectFit: "cover", borderRadius: 6, flexShrink: 0 }} />
             )}
             <div style={{ flex: 1 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                <span style={{ ...F, fontSize: 18, fontWeight: 700, color: C.amber }}>{packages.length}</span>
-                <span style={{ ...F, fontSize: 10, color: C.text }}>PACKAGE{packages.length !== 1 ? "S" : ""} AWAITING YOUR DECISION</span>
+                <span style={{ ...F, fontSize: 20, fontWeight: 700, color: C.amber }}>{pendingPackages.length}</span>
+                <span style={{ ...F, fontSize: 10, color: C.text }}>PACKAGE{pendingPackages.length !== 1 ? "S" : ""} AWAITING REVIEW</span>
               </div>
-              <div style={{ ...F, fontSize: 10, color: C.muted, marginBottom: 10 }}>
-                {packages[0]?.title?.slice(0, 50) || ""}
-              </div>
-              <AmberBtn style={{ fontSize: 10, padding: "4px 12px" }}>[ VIEW ALL PACKAGES ]</AmberBtn>
+              <div style={{ ...F, fontSize: 9, color: C.muted, marginBottom: 8 }}>{pendingPackages[0]?.title?.slice(0, 48) || ""}</div>
+              <AmberBtn style={{ fontSize: 10, padding: "4px 12px" }}>[ VIEW ALL ]</AmberBtn>
             </div>
           </div>
         ) : (
-          <div style={{ ...F, fontSize: 10, color: C.muted, letterSpacing: 1 }}>
-            NO PACKAGES PENDING — PRODUCTION FLOOR IDLE
-          </div>
+          <div style={{ ...F, fontSize: 10, color: C.muted }}>NO PACKAGES PENDING — PRODUCTION FLOOR IDLE</div>
         )}
       </Room>
 
-      {/* Room 3 — Snoopy */}
-      <Room accent={C.cyan} onClick={() => setActive("listing")}>
-        <RoomLabel text="Copy & Upload" color={C.cyan} />
+      {/* Room 3 — Ready To Post */}
+      <Room accent={C.success} onClick={() => setActive("ready_to_post")}>
+        <RoomLabel text="Ready To Post" color={C.success} />
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <ListingCat color={C.cyan} size={32} />
+          <ListingCat color={C.success} size={30} />
           <div style={{ flex: 1 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-              <span style={{ ...F, fontSize: 12, fontWeight: 700, color: C.cyan, letterSpacing: 1.5 }}>SNOOPY</span>
-              <span style={{ ...F, fontSize: 8, color: C.muted }}>SEO & LISTING COPY</span>
+              <span style={{ ...F, fontSize: 11, fontWeight: 700, color: C.success, letterSpacing: 1.2 }}>SNOOPY</span>
+              <span style={{ ...F, fontSize: 8, color: C.muted }}>COPY DONE</span>
               <StatusDot color={agentDotColor(snoopy)} />
             </div>
-            <div style={{ display: "flex", gap: 16 }}>
-              <div>
-                <div style={{ ...F, fontSize: 7, color: C.muted, letterSpacing: 1, marginBottom: 2 }}>RUNS</div>
-                <div style={{ ...F, fontSize: 16, fontWeight: 700, color: C.text }}>{snoopy?.run_count || 0}</div>
-              </div>
-              <div>
-                <div style={{ ...F, fontSize: 7, color: C.muted, letterSpacing: 1, marginBottom: 2 }}>READY</div>
-                <div style={{ ...F, fontSize: 16, fontWeight: 700, color: listings.length > 0 ? C.cyan : C.text }}>{listings.length}</div>
-              </div>
-            </div>
+            <div style={{ ...F, fontSize: 20, fontWeight: 700, color: listings.length > 0 ? C.success : C.text }}>{listings.length}</div>
+            <div style={{ ...F, fontSize: 7, color: C.muted, marginTop: 2 }}>products ready to post</div>
           </div>
-          {listings.length > 0 && <Badge text={`${listings.length} READY TO POST`} color={C.cyan} />}
+          {listings.length > 0 && <Badge text={`${listings.length} READY`} color={C.success} />}
         </div>
       </Room>
 
@@ -569,15 +535,14 @@ function RoomsView({ agentsStatus, packages, listings, setActive }) {
       <Room accent={C.danger} onClick={() => setActive("feedback")}>
         <RoomLabel text="Performance" color={C.danger} />
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <FeedbackCat color={C.danger} size={32} />
+          <FeedbackCat color={C.danger} size={30} />
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-              <span style={{ ...F, fontSize: 12, fontWeight: 700, color: C.danger, letterSpacing: 1.5 }}>WAFFLE</span>
-              <span style={{ ...F, fontSize: 8, color: C.muted }}>PERFORMANCE TRACKER</span>
+              <span style={{ ...F, fontSize: 11, fontWeight: 700, color: C.danger, letterSpacing: 1.2 }}>WAFFLE</span>
               <StatusDot color={agentDotColor(waffle)} />
             </div>
             <div style={{ ...F, fontSize: 9, color: C.muted }}>NEXT RECAP IN 6 DAYS</div>
-            <div style={{ ...F, fontSize: 9, color: `${C.muted}88`, marginTop: 3 }}>NO DATA YET — AWAITING FIRST ETSY SALES</div>
+            <div style={{ ...F, fontSize: 8, color: `${C.muted}77`, marginTop: 2 }}>AWAITING FIRST ETSY SALES</div>
           </div>
         </div>
       </Room>
@@ -586,7 +551,7 @@ function RoomsView({ agentsStatus, packages, listings, setActive }) {
 }
 
 // ─── Snow Overview page ─────────────────────────────────────
-function OverviewPage({ setActive, pipelineStatus, packages, listings, launchProps = {} }) {
+function OverviewPage({ setActive, pipelineStatus, pendingPackages, listings, allPackages, launchProps = {} }) {
   const { keywords = "", setKeywords, launching, launch, runStep3: lr3, stopPipeline, resetPipeline, fullReset } = launchProps;
   const isRunning    = pipelineStatus?.running;
   const pipelineStep = pipelineStatus?.status;
@@ -599,6 +564,7 @@ function OverviewPage({ setActive, pipelineStatus, packages, listings, launchPro
 
   const subAgents = agentsStatus.filter(a => a.name !== "Snow");
   const snowAgent = agentsStatus.find(a => a.name === "Snow");
+  const latestBrief = [...allPackages].reverse().find(p => p.snow_brief)?.snow_brief;
 
   const callMeeting = async () => {
     setMeetingBusy(true);
@@ -614,15 +580,14 @@ function OverviewPage({ setActive, pipelineStatus, packages, listings, launchPro
     return days > 0 ? `in ${days}d ${hours}h` : `in ${hours}h`;
   })();
 
-  const agentPageMap = { Leon: "research", Riko: "design", Snoopy: "listing", Waffle: "feedback" };
+  const agentPageMap = { Leon: "research", Riko: "design", Snoopy: "ready_to_post", Waffle: "feedback" };
 
   return (
     <div style={{ padding: "20px 22px" }}>
 
       {/* Snow identity */}
       <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 18,
-        padding: "16px 18px", background: C.card, border: `1px solid ${C.snow}33`,
-        borderRadius: 12, boxShadow: C.glowSnow }}>
+        padding: "16px 18px", background: C.card, border: `1px solid ${C.snow}33`, borderRadius: 12, boxShadow: C.glowSnow }}>
         <LoafCat color={C.snow} size={48} />
         <div style={{ flex: 1 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 4 }}>
@@ -630,19 +595,15 @@ function OverviewPage({ setActive, pipelineStatus, packages, listings, launchPro
             <span style={{ ...F, fontSize: 9, color: C.muted, letterSpacing: 1.5 }}>AGENT MANAGER · OBSERVATION MODE</span>
             <Badge text="claude-opus-4.6" color={C.snow} />
           </div>
-          {/* SNOW IS WATCHING */}
           <div style={{ marginBottom: 8 }}>
-            {pipelineStatus?.running ? (
+            {isRunning ? (
               <div style={{ ...F, fontSize: 10, color: C.snow, letterSpacing: 1.5, animation: "pulse 1.4s ease-in-out infinite" }}>
                 ❄️ SNOW IS WATCHING {(pipelineStatus.active_agent || "").toUpperCase()} — {pipelineStatus.current_task || "processing..."}
               </div>
             ) : (
-              <div style={{ ...F, fontSize: 10, color: C.muted, letterSpacing: 1.5 }}>
-                ❄️ ALL AGENTS IDLE — AWAITING YOUR SIGNAL
-              </div>
+              <div style={{ ...F, fontSize: 10, color: C.muted, letterSpacing: 1.5 }}>❄️ ALL AGENTS IDLE — AWAITING YOUR SIGNAL</div>
             )}
           </div>
-          {/* Agent dots */}
           <div style={{ display: "flex", gap: 14 }}>
             {subAgents.map(a => {
               const dot = agentDotColor(a);
@@ -664,6 +625,17 @@ function OverviewPage({ setActive, pipelineStatus, packages, listings, launchPro
         </div>
       </div>
 
+      {/* Snow's latest brief */}
+      {latestBrief && (
+        <div style={{ background: C.card, border: `1px solid ${C.snow}22`, borderRadius: 10,
+          padding: "12px 16px", marginBottom: 18 }}>
+          <div style={{ ...F, fontSize: 7, color: C.snow, letterSpacing: 2, marginBottom: 6 }}>❄️ SNOW'S LATEST BRIEF</div>
+          <div style={{ ...F, fontSize: 9, color: `${C.snow}cc`, lineHeight: 1.7, fontStyle: "italic" }}>
+            {latestBrief.slice(0, 200)}{latestBrief.length > 200 ? "..." : ""}
+          </div>
+        </div>
+      )}
+
       {/* Launch Production card */}
       <div style={{ background: C.card, border: `1px solid ${C.accent}44`, borderRadius: 12,
         padding: "16px 18px", marginBottom: 18, boxShadow: C.glow }}>
@@ -671,9 +643,9 @@ function OverviewPage({ setActive, pipelineStatus, packages, listings, launchPro
         <input value={keywords} onChange={e => setKeywords?.(e.target.value)}
           onKeyDown={e => e.key === "Enter" && !isRunning && !launching && launch?.()}
           placeholder="keywords for Snow (optional)..."
-          style={{ ...F, width: "100%", background: C.bg, border: `1px solid ${C.border}`,
-            borderRadius: 8, padding: "8px 12px", color: C.text, fontSize: 11,
-            outline: "none", caretColor: C.snow, boxSizing: "border-box", marginBottom: 10 }}
+          style={{ ...F, width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8,
+            padding: "8px 12px", color: C.text, fontSize: 11, outline: "none",
+            caretColor: C.snow, boxSizing: "border-box", marginBottom: 10 }}
           onFocus={e => e.target.style.borderColor = C.snow}
           onBlur={e => e.target.style.borderColor = C.border}
         />
@@ -691,14 +663,14 @@ function OverviewPage({ setActive, pipelineStatus, packages, listings, launchPro
           )}
         </div>
         <div style={{ display: "flex", gap: 6 }}>
-          <GhostBtn onClick={resetPipeline} style={{ flex: 1, padding: "5px 0", fontSize: 9, letterSpacing: 1 }}>[ RESET ]</GhostBtn>
-          <RedBtn onClick={fullReset} style={{ flex: 1, padding: "5px 0", fontSize: 9, letterSpacing: 1 }}>[ FULL RESET ]</RedBtn>
+          <GhostBtn onClick={resetPipeline} style={{ flex: 1, padding: "5px 0", fontSize: 9 }}>[ RESET ]</GhostBtn>
+          <RedBtn onClick={fullReset} style={{ flex: 1, padding: "5px 0", fontSize: 9 }}>[ FULL RESET ]</RedBtn>
         </div>
       </div>
 
-      {/* Production floor rooms */}
+      {/* Rooms */}
       <div style={{ ...F, fontSize: 8, color: C.muted, letterSpacing: 2, textTransform: "uppercase", marginBottom: 10 }}>PRODUCTION FLOOR</div>
-      <RoomsView agentsStatus={agentsStatus} packages={packages} listings={listings} setActive={setActive} />
+      <RoomsView agentsStatus={agentsStatus} pendingPackages={pendingPackages} listings={listings} setActive={setActive} />
 
       {/* Pending decisions */}
       <div style={{ marginBottom: 18, marginTop: 4 }}>
@@ -717,8 +689,7 @@ function OverviewPage({ setActive, pipelineStatus, packages, listings, launchPro
               <span style={{ ...F, fontSize: 8, color: C.muted, marginLeft: "auto" }}>{String(d.created_at || "").slice(0, 16)}</span>
             </div>
             <div style={{ ...F, fontSize: 11, color: C.text, marginBottom: 5, lineHeight: 1.5 }}>{d.description}</div>
-            <div style={{ ...F, fontSize: 9, color: C.muted, lineHeight: 1.6, marginBottom: 10,
-              borderLeft: `2px solid ${C.accent}33`, paddingLeft: 8 }}>{d.recommendation}</div>
+            <div style={{ ...F, fontSize: 9, color: C.muted, lineHeight: 1.6, marginBottom: 10, borderLeft: `2px solid ${C.accent}33`, paddingLeft: 8 }}>{d.recommendation}</div>
             {modifyId === d.id && (
               <input value={modifyNote} onChange={e => setModifyNote(e.target.value)}
                 placeholder="Note (optional)..."
@@ -740,30 +711,25 @@ function OverviewPage({ setActive, pipelineStatus, packages, listings, launchPro
           <Label style={{ margin: 0 }}>WEEKLY MEETING</Label>
           <span style={{ ...F, fontSize: 8, color: C.muted, marginLeft: "auto" }}>Next: Monday 09:00 ({nextMondayStr})</span>
         </div>
-        {lastMeeting ? (
-          <div style={{ ...F, fontSize: 9, color: C.muted, lineHeight: 1.7, marginBottom: 10, maxHeight: 48, overflow: "hidden" }}>
-            {(lastMeeting.summary || "").slice(0, 200)}
-          </div>
-        ) : (
-          <div style={{ ...F, fontSize: 9, color: `${C.muted}66`, marginBottom: 10 }}>No meetings yet</div>
-        )}
+        {lastMeeting
+          ? <div style={{ ...F, fontSize: 9, color: C.muted, lineHeight: 1.7, marginBottom: 10, maxHeight: 48, overflow: "hidden" }}>{(lastMeeting.summary || "").slice(0, 200)}</div>
+          : <div style={{ ...F, fontSize: 9, color: `${C.muted}66`, marginBottom: 10 }}>No meetings yet</div>
+        }
         <VioletBtn onClick={callMeeting} disabled={meetingBusy} style={{ fontSize: 10 }}>
           {meetingBusy ? "CALLING MEETING..." : "[ CALL MEETING NOW ]"}
         </VioletBtn>
       </div>
 
-      {/* Agent performance mini cards */}
+      {/* Agent performance */}
       <Label style={{ marginBottom: 10 }}>AGENT PERFORMANCE</Label>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
         {subAgents.map(a => {
           const dot = agentDotColor(a);
-          const primary = Object.entries(a.metrics || {}).find(([k]) => k === "proposals_per_run" || k === "images_per_run" || k === "listings_per_run" || k === "completion_rate");
-          const accentMap = { Leon: C.accent, Riko: C.accent, Snoopy: C.cyan, Waffle: C.danger };
-          const ac = accentMap[a.name] || C.accent;
+          const primary = Object.entries(a.metrics || {}).find(([k]) => ["proposals_per_run","images_per_run","listings_per_run","completion_rate"].includes(k));
+          const ac = { Leon: C.accent, Riko: C.accent, Snoopy: C.cyan, Waffle: C.danger }[a.name] || C.accent;
           return (
             <div key={a.name} onClick={() => setActive(agentPageMap[a.name] || "overview")}
-              style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: "12px",
-                cursor: "pointer", transition: "all 0.15s" }}
+              style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: "12px", cursor: "pointer" }}
               onMouseEnter={e => { e.currentTarget.style.borderColor = ac; e.currentTarget.style.boxShadow = `0 0 10px ${ac}22`; }}
               onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.boxShadow = "none"; }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
@@ -774,10 +740,10 @@ function OverviewPage({ setActive, pipelineStatus, packages, listings, launchPro
               <div style={{ ...F, fontSize: 16, fontWeight: 700, color: C.text }}>{a.run_count || 0}</div>
               {primary && (
                 <>
-                  <div style={{ ...F, fontSize: 7, color: C.muted, marginTop: 6, marginBottom: 2 }}>{primary[0].toUpperCase()}</div>
-                  <div style={{ ...F, fontSize: 14, color: C.text }}>
-                    {primary[1] != null ? (primary[1] < 1.5 ? (primary[1] * 100).toFixed(0) + "%" : primary[1].toFixed(1)) : "—"}
-                    <span style={{ fontSize: 10, marginLeft: 4, color: { up: C.success, down: C.danger, stable: C.muted }[a.trends?.[primary[0]]] || C.muted }}>
+                  <div style={{ ...F, fontSize: 7, color: C.muted, marginTop: 6, marginBottom: 2 }}>{primary[0].toUpperCase().replace(/_/g," ")}</div>
+                  <div style={{ ...F, fontSize: 13, color: C.text }}>
+                    {primary[1] != null ? (primary[1] < 1.5 ? (primary[1]*100).toFixed(0)+"%" : primary[1].toFixed(1)) : "—"}
+                    <span style={{ fontSize: 10, marginLeft: 3, color: { up: C.success, down: C.danger, stable: C.muted }[a.trends?.[primary[0]]] || C.muted }}>
                       {{ up: "↑", down: "↓", stable: "→" }[a.trends?.[primary[0]]] || "→"}
                     </span>
                   </div>
@@ -792,109 +758,314 @@ function OverviewPage({ setActive, pipelineStatus, packages, listings, launchPro
   );
 }
 
-// ─── Review page ───────────────────────────────────────────
-function ReviewPage({ packages, reviewPackage, activeAgent, runStep2 }) {
-  const [expanded, setExpanded]     = useState(null);
-  const [showPrompt, setShowPrompt] = useState(null);
+// ─── Review Room page ───────────────────────────────────────
+function ReviewPage({ allPackages, reviewPackage, activeAgent, runStep2, pipelineStatus, refresh }) {
+  const [expanded, setExpanded]         = useState(null);
+  const [showBrief, setShowBrief]       = useState(null);
+  const [rejectId, setRejectId]         = useState(null);
+  const [rejectReason, setRejectReason] = useState("");
+  const [regenId, setRegenId]           = useState(null);
   const [sessionReviewed, setSessionReviewed] = useState(0);
-  const isActive = activeAgent === "Leon" || activeAgent === "Riko";
 
-  const handleReview = async (pkg, status) => {
-    await reviewPackage(pkg.id, status, { title: pkg.title, niche: pkg.niche, keyword: pkg.keyword });
+  const isActive = activeAgent === "Leon" || activeAgent === "Riko" || activeAgent === "Snow";
+  const pending = allPackages.filter(p => p.status === "pending_review");
+  const pipeline = allPackages.filter(p => p.status !== "rejected");
+
+  const handleApprove = async (pkg) => {
+    await reviewPackage(pkg.id, "strategy_review", {
+      title: pkg.title, niche: pkg.niche, keyword: pkg.keyword, snow_brief: pkg.snow_brief,
+    });
     setSessionReviewed(n => n + 1);
   };
 
+  const handleReject = async (pkg) => {
+    await reviewPackage(pkg.id, "rejected", {
+      title: pkg.title, niche: pkg.niche, keyword: pkg.keyword,
+      snow_brief: pkg.snow_brief, rejection_reason: rejectReason,
+    });
+    setRejectId(null);
+    setRejectReason("");
+    setSessionReviewed(n => n + 1);
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Delete this package permanently?")) return;
+    try {
+      await fetch(`${API}/packages/${id}`, { method: "DELETE" });
+      refresh?.();
+    } catch (_) {}
+  };
+
+  const handleRegenerate = async (id) => {
+    setRegenId(id);
+    try {
+      await fetch(`${API}/step2_single/${id}`, { method: "POST" });
+      setTimeout(() => { setRegenId(null); refresh?.(); }, 3000);
+    } catch (_) { setRegenId(null); }
+  };
+
+  const statusLabel = (status) => {
+    const map = {
+      pending_review:      { text: "AWAITING REVIEW",         color: C.amber },
+      strategy_review:     { text: "APPROVED — STRATEGY",     color: C.success },
+      approved_for_listing:{ text: "STRATEGY OK — SNOOPY...", color: C.cyan },
+      ready_to_upload:     { text: "READY TO POST",           color: C.success },
+    };
+    return map[status] || { text: status.toUpperCase(), color: C.muted };
+  };
+
   return (
-    <div style={{ padding: "20px 22px" }}>
+    <div style={{ padding: "20px 22px", position: "relative" }}>
+      {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
         <ReviewCat color={C.amber} size={32} />
-        <span style={{ ...F, fontSize: 16, fontWeight: 700, color: C.amber, letterSpacing: 2 }}>REVIEW</span>
-        <span style={{ ...F, fontSize: 9, color: C.muted }}>LEON × RIKO</span>
+        <span style={{ ...F, fontSize: 16, fontWeight: 700, color: C.amber, letterSpacing: 2 }}>REVIEW ROOM</span>
+        <span style={{ ...F, fontSize: 9, color: C.muted }}>LEON × SNOW × RIKO</span>
         {isActive && <Badge text="GENERATING" color={C.accent} />}
-        {packages.length > 0 && <Badge text={`${packages.length} PENDING`} color={C.amber} />}
+        {pending.length > 0 && <Badge text={`${pending.length} PENDING`} color={C.amber} />}
       </div>
 
-      {packages.length === 0 ? (
+      {pipeline.length === 0 ? (
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: "40px 24px", textAlign: "center" }}>
           {sessionReviewed > 0 ? (
             <>
               <div style={{ ...F, fontSize: 13, color: C.success, letterSpacing: 2, marginBottom: 12 }}>ALL PACKAGES REVIEWED</div>
-              <div style={{ ...F, fontSize: 10, color: C.muted, marginBottom: 20 }}>
-                {sessionReviewed} package{sessionReviewed !== 1 ? "s" : ""} decided — approved packages queued for strategy review.
-              </div>
+              <div style={{ ...F, fontSize: 10, color: C.muted, marginBottom: 20 }}>{sessionReviewed} decided — approved packages queued for strategy.</div>
               <GreenBtn onClick={runStep2} style={{ fontSize: 11, letterSpacing: 1 }}>[ RUN STRATEGY REVIEW ]</GreenBtn>
             </>
-          ) : <EmptyState text="NO PACKAGES READY — RUN THE PIPELINE FIRST" />}
+          ) : <EmptyState text="NO PACKAGES — RUN THE PIPELINE FIRST" />}
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          {packages.map(pkg => (
-            <div key={pkg.id} style={{ background: C.card, border: `1px solid ${C.roomBorder}`, borderRadius: 12, overflow: "hidden" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "220px 1fr" }}>
-                <div style={{ position: "relative", background: "#050510", minHeight: 260 }}>
-                  {pkg.image_url ? (
-                    <>
-                      <img src={pkg.image_url} alt={pkg.title}
-                        style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", cursor: "pointer" }}
-                        onClick={() => setExpanded(expanded === pkg.id ? null : pkg.id)} />
-                      <button onClick={() => setExpanded(expanded === pkg.id ? null : pkg.id)} style={{
-                        position: "absolute", top: 8, right: 8, ...F, fontSize: 9, color: C.text,
-                        background: "rgba(0,0,0,0.8)", border: `1px solid ${C.border}`, borderRadius: 4,
-                        padding: "3px 8px", cursor: "pointer", letterSpacing: 1 }}>EXPAND</button>
-                    </>
-                  ) : (
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 260 }}>
-                      <span style={{ ...F, fontSize: 9, color: C.muted }}>NO IMAGE</span>
+          {pipeline.map(pkg => {
+            const sl = statusLabel(pkg.status);
+            const isRegen = regenId === pkg.id;
+            return (
+              <div key={pkg.id} style={{ background: C.card, border: `1px solid ${C.roomBorder}`, borderRadius: 12, overflow: "hidden" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr" }}>
+                  {/* LEFT — two images */}
+                  <div style={{ background: "#050510", display: "flex", flexDirection: "column" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", flex: 1, minHeight: 200 }}>
+                      {/* Design */}
+                      <div style={{ position: "relative", borderRight: `1px solid ${C.border}` }}>
+                        {pkg.image_url ? (
+                          <>
+                            <img src={pkg.image_url} alt="design"
+                              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", cursor: "pointer", minHeight: 200 }}
+                              onClick={() => setExpanded(expanded === pkg.id + "_d" ? null : pkg.id + "_d")} />
+                            <div style={{ position: "absolute", top: 6, left: 6, ...F, fontSize: 7, color: C.text,
+                              background: "rgba(0,0,0,0.7)", padding: "2px 6px", borderRadius: 3 }}>DESIGN</div>
+                          </>
+                        ) : <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 200, ...F, fontSize: 9, color: C.muted }}>NO DESIGN</div>}
+                      </div>
+                      {/* Mockup */}
+                      <div style={{ position: "relative" }}>
+                        {pkg.mockup_url ? (
+                          <>
+                            <img src={pkg.mockup_url} alt="mockup"
+                              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", cursor: "pointer", minHeight: 200 }}
+                              onClick={() => setExpanded(expanded === pkg.id + "_m" ? null : pkg.id + "_m")} />
+                            <div style={{ position: "absolute", top: 6, left: 6, ...F, fontSize: 7, color: C.text,
+                              background: "rgba(0,0,0,0.7)", padding: "2px 6px", borderRadius: 3 }}>MOCKUP</div>
+                          </>
+                        ) : <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 200, ...F, fontSize: 9, color: C.muted }}>NO MOCKUP</div>}
+                      </div>
                     </div>
-                  )}
-                </div>
-                <div style={{ padding: "20px 22px", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
-                  <div>
-                    <div style={{ ...F, fontSize: 15, color: C.text, fontWeight: 700, marginBottom: 12, lineHeight: 1.4 }}>{pkg.title}</div>
-                    <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
-                      <Badge text={pkg.niche} color={C.accent} />
-                      <Badge text={pkg.keyword} color={C.cyan} />
+                    {/* Regenerate */}
+                    <div style={{ padding: "8px 10px", borderTop: `1px solid ${C.border}` }}>
+                      <GhostBtn onClick={() => !isRegen && handleRegenerate(pkg.id)}
+                        disabled={isRegen}
+                        style={{ width: "100%", padding: "5px 0", fontSize: 9, letterSpacing: 1 }}>
+                        {isRegen ? "REGENERATING..." : "[ REGENERATE ]"}
+                      </GhostBtn>
                     </div>
-                    <div style={{ marginBottom: 12 }}>
-                      <div style={{ ...F, fontSize: 8, color: C.muted, letterSpacing: 1, marginBottom: 4 }}>WHY IT SELLS</div>
-                      <div style={{ ...F, fontSize: 10, color: C.muted, lineHeight: 1.7 }}>{pkg.why_it_sells}</div>
+                  </div>
+
+                  {/* RIGHT — info + actions */}
+                  <div style={{ padding: "18px 20px", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                        <Badge text={sl.text} color={sl.color} />
+                      </div>
+                      <div style={{ ...F, fontSize: 14, color: C.text, fontWeight: 700, marginBottom: 10, lineHeight: 1.4 }}>{pkg.title}</div>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+                        <Badge text={pkg.niche} color={C.accent} />
+                        <Badge text={pkg.keyword} color={C.cyan} />
+                      </div>
+                      <div style={{ marginBottom: 10 }}>
+                        <div style={{ ...F, fontSize: 7, color: C.muted, letterSpacing: 1, marginBottom: 3 }}>WHY IT SELLS</div>
+                        <div style={{ ...F, fontSize: 9, color: C.muted, lineHeight: 1.7 }}>{pkg.why_it_sells}</div>
+                      </div>
+                      {pkg.snow_brief && (
+                        <div style={{ marginBottom: 10 }}>
+                          <button onClick={() => setShowBrief(showBrief === pkg.id ? null : pkg.id)}
+                            style={{ ...F, fontSize: 7, color: C.snow, background: "transparent", border: "none",
+                              cursor: "pointer", letterSpacing: 1, padding: 0, textTransform: "uppercase" }}>
+                            {showBrief === pkg.id ? "▲ HIDE BRIEF" : "❄️ SNOW'S BRIEF"}
+                          </button>
+                          {showBrief === pkg.id && (
+                            <div style={{ ...F, fontSize: 9, color: `${C.snow}99`, marginTop: 6, lineHeight: 1.6,
+                              background: `${C.snow}08`, padding: "8px 10px", borderRadius: 6, border: `1px solid ${C.snow}22` }}>
+                              {pkg.snow_brief}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {pkg.suggested_price && (
+                        <div style={{ ...F, fontSize: 9, color: C.muted, marginBottom: 10 }}>
+                          SNOW SUGGESTS: <span style={{ color: C.success, fontWeight: 700 }}>{pkg.suggested_price}</span>
+                        </div>
+                      )}
                     </div>
-                    {pkg.image_prompt && (
-                      <div>
-                        <button onClick={() => setShowPrompt(showPrompt === pkg.id ? null : pkg.id)}
-                          style={{ ...F, fontSize: 8, color: C.muted, background: "transparent", border: "none",
-                            cursor: "pointer", letterSpacing: 1, padding: 0, textTransform: "uppercase" }}>
-                          {showPrompt === pkg.id ? "▲ HIDE PROMPT" : "▼ IMAGE PROMPT"}
-                        </button>
-                        {showPrompt === pkg.id && (
-                          <div style={{ ...F, fontSize: 9, color: `${C.muted}99`, marginTop: 6, lineHeight: 1.6,
-                            background: C.bg, padding: "8px 10px", borderRadius: 6, border: `1px solid ${C.border}` }}>
-                            {pkg.image_prompt}
+
+                    {/* Actions */}
+                    {pkg.status === "pending_review" && (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        <GreenBtn onClick={() => handleApprove(pkg)} style={{ width: "100%", padding: "8px 0", fontSize: 11, letterSpacing: 1, borderRadius: 8 }}>
+                          [ APPROVE ]
+                        </GreenBtn>
+                        {rejectId === pkg.id ? (
+                          <div>
+                            <input value={rejectReason} onChange={e => setRejectReason(e.target.value)}
+                              placeholder="Why? (optional)"
+                              style={{ ...F, width: "100%", background: C.bg, border: `1px solid ${C.danger}44`,
+                                borderRadius: 6, padding: "6px 9px", color: C.text, fontSize: 10,
+                                outline: "none", marginBottom: 6, boxSizing: "border-box" }} />
+                            <div style={{ display: "flex", gap: 6 }}>
+                              <RedBtn onClick={() => handleReject(pkg)} style={{ flex: 1, padding: "6px 0", fontSize: 10 }}>[ CONFIRM REJECT ]</RedBtn>
+                              <GhostBtn onClick={() => { setRejectId(null); setRejectReason(""); }} style={{ padding: "6px 12px", fontSize: 10 }}>[ CANCEL ]</GhostBtn>
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <RedBtn onClick={() => setRejectId(pkg.id)} style={{ flex: 1, padding: "8px 0", fontSize: 11, letterSpacing: 1, borderRadius: 8 }}>[ REJECT ]</RedBtn>
+                            <GhostBtn onClick={() => handleDelete(pkg.id)} style={{ padding: "8px 12px", fontSize: 9 }}>[ DEL ]</GhostBtn>
                           </div>
                         )}
                       </div>
                     )}
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 16 }}>
-                    <GreenBtn onClick={() => handleReview(pkg, "strategy_review")}
-                      style={{ width: "100%", padding: "9px 0", fontSize: 11, letterSpacing: 1, borderRadius: 8 }}>
-                      [ APPROVE ]
-                    </GreenBtn>
-                    <RedBtn onClick={() => handleReview(pkg, "rejected")}
-                      style={{ width: "100%", padding: "9px 0", fontSize: 11, letterSpacing: 1, borderRadius: 8 }}>
-                      [ REJECT ]
-                    </RedBtn>
+                    {pkg.status === "strategy_review" && (
+                      <div style={{ ...F, fontSize: 9, color: C.muted, padding: "8px 0" }}>✓ APPROVED — AWAITING STRATEGY</div>
+                    )}
+                    {pkg.status === "approved_for_listing" && (
+                      <div style={{ ...F, fontSize: 9, color: C.cyan, padding: "8px 0" }}>✓ STRATEGY APPROVED — SNOOPY WRITING...</div>
+                    )}
+                    {pkg.status === "ready_to_upload" && (
+                      <div style={{ ...F, fontSize: 9, color: C.success, padding: "8px 0" }}>✓ READY — VIEW IN READY TO POST</div>
+                    )}
                   </div>
                 </div>
+
+                {/* Fullscreen */}
+                {(expanded === pkg.id + "_d" || expanded === pkg.id + "_m") && (
+                  <div onClick={() => setExpanded(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,8,0.97)",
+                    display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, cursor: "pointer" }}>
+                    <img
+                      src={expanded === pkg.id + "_m" ? pkg.mockup_url : pkg.image_url}
+                      alt={pkg.title}
+                      style={{ maxHeight: "92vh", maxWidth: "72vw", objectFit: "contain", borderRadius: 8 }} />
+                  </div>
+                )}
               </div>
-              {expanded === pkg.id && pkg.image_url && (
-                <div onClick={() => setExpanded(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.97)",
-                  display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, cursor: "pointer" }}>
-                  <img src={pkg.image_url} alt={pkg.title} style={{ maxHeight: "92vh", maxWidth: "72vw", objectFit: "contain", borderRadius: 8 }} />
+            );
+          })}
+        </div>
+      )}
+
+      {/* Live activity panel */}
+      {pipelineStatus?.running && (
+        <div style={{ position: "fixed", bottom: 24, right: 340, width: 210, background: C.card,
+          border: `1px solid ${C.accent}55`, borderRadius: 10, padding: "12px 14px",
+          boxShadow: C.glow, zIndex: 50 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+            <StatusDot color={C.accent} pulse />
+            <span style={{ ...F, fontSize: 8, color: C.accent, letterSpacing: 1.5 }}>PIPELINE ACTIVE</span>
+          </div>
+          <div style={{ ...F, fontSize: 9, color: C.snow, fontWeight: 700, letterSpacing: 1, marginBottom: 4 }}>
+            {(pipelineStatus.active_agent || "").toUpperCase()}
+          </div>
+          <div style={{ ...F, fontSize: 8, color: C.muted, lineHeight: 1.5 }}>
+            {pipelineStatus.current_task || "processing..."}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Ready To Post page ────────────────────────────────────
+function ReadyToPostPage({ listings }) {
+  const [selected, setSelected] = useState(null);
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Delete this listing?")) return;
+    await fetch(`${API}/packages/${id}`, { method: "DELETE" });
+  };
+
+  return (
+    <div style={{ padding: "20px 22px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
+        <ListingCat color={C.success} size={34} />
+        <div>
+          <div style={{ ...F, fontSize: 16, fontWeight: 700, color: C.success, letterSpacing: 2 }}>READY TO POST</div>
+          <div style={{ ...F, fontSize: 9, color: C.muted }}>Products approved and ready for Etsy</div>
+        </div>
+        {listings.length > 0 && <Badge text={`${listings.length} READY`} color={C.success} />}
+      </div>
+
+      {listings.length === 0 ? <EmptyState text="NO LISTINGS READY — COMPLETE THE PIPELINE FIRST" /> : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}>
+          {listings.map(l => (
+            <div key={l.id} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden", transition: "all 0.15s" }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = C.success; e.currentTarget.style.boxShadow = `0 0 12px ${C.success}22`; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.boxShadow = "none"; }}>
+              {/* Prefer mockup for preview */}
+              {(l.mockup_url || l.image_url) && (
+                <div style={{ position: "relative" }}>
+                  <img src={l.mockup_url || l.image_url} alt={l.title}
+                    style={{ width: "100%", height: 170, objectFit: "cover", display: "block" }} />
+                  {l.price && <span style={{ position: "absolute", bottom: 6, left: 8, ...F, fontSize: 14, fontWeight: 700, color: C.success, background: "rgba(0,0,0,0.85)", padding: "2px 8px", borderRadius: 4 }}>{l.price}</span>}
                 </div>
               )}
+              <div style={{ padding: "10px 12px" }}>
+                <div style={{ ...F, fontSize: 9, color: C.text, marginBottom: 5, lineHeight: 1.4 }}>{l.title?.slice(0, 52)}{l.title?.length > 52 ? "…" : ""}</div>
+                <div style={{ ...F, fontSize: 8, color: C.muted, marginBottom: 8 }}>{l.tags?.split(",").length || 0} tags</div>
+                <div style={{ display: "flex", gap: 5, flexDirection: "column" }}>
+                  <CyanBtn onClick={() => setSelected(l)} style={{ width: "100%", padding: "5px 0", fontSize: 9 }}>[ VIEW DETAILS ]</CyanBtn>
+                  <GhostBtn onClick={() => handleDelete(l.id)} style={{ width: "100%", padding: "4px 0", fontSize: 8 }}>[ DELETE ]</GhostBtn>
+                </div>
+              </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Modal */}
+      {selected && (
+        <div onClick={() => setSelected(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,8,0.96)",
+          display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, cursor: "pointer" }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: C.card, border: `1px solid ${C.accent}`,
+            borderRadius: 12, overflow: "hidden", maxWidth: 700, width: "94%", cursor: "default",
+            display: "grid", gridTemplateColumns: "1fr 1fr", boxShadow: C.glowSnow, maxHeight: "90vh" }}>
+            {/* Left: stacked images */}
+            <div style={{ overflow: "hidden", display: "flex", flexDirection: "column" }}>
+              {selected.mockup_url && <img src={selected.mockup_url} alt="mockup" style={{ width: "100%", height: "50%", objectFit: "cover", display: "block" }} />}
+              {selected.image_url && <img src={selected.image_url} alt="design" style={{ width: "100%", height: selected.mockup_url ? "50%" : "100%", objectFit: "cover", display: "block" }} />}
+            </div>
+            {/* Right: details */}
+            <div style={{ padding: "20px 18px", overflowY: "auto" }}>
+              <div style={{ ...F, fontSize: 13, color: C.text, marginBottom: 6, lineHeight: 1.4 }}>{selected.title}</div>
+              <div style={{ ...F, fontSize: 22, fontWeight: 700, color: C.success, marginBottom: 14 }}>{selected.price}</div>
+              <Label>Description</Label>
+              <div style={{ ...F, fontSize: 10, color: C.muted, lineHeight: 1.7, marginBottom: 12 }}>
+                {selected.description?.slice(0, 400)}{selected.description?.length > 400 ? "…" : ""}
+              </div>
+              <Label>Tags</Label>
+              <div style={{ ...F, fontSize: 9, color: `${C.muted}88`, lineHeight: 2, marginBottom: 16 }}>{selected.tags}</div>
+              <CyanBtn style={{ width: "100%", padding: "9px 0", fontSize: 11, marginBottom: 8, letterSpacing: 1 }}>[ POST TO ETSY ]</CyanBtn>
+              <GhostBtn onClick={() => setSelected(null)} style={{ width: "100%", padding: "8px 0", fontSize: 11 }}>[ CLOSE ]</GhostBtn>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -906,7 +1077,6 @@ function AgentHistoryPage({ name, role, Cat, accent = C.accent, entries, activeA
   const agentsStatus = useAgentsStatus();
   const agent = agentsStatus.find(a => a.name === name);
   const isActive = activeAgent === name;
-
   return (
     <div style={{ padding: "20px 22px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
@@ -922,8 +1092,8 @@ function AgentHistoryPage({ name, role, Cat, accent = C.accent, entries, activeA
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 18 }}>
           {[
             { label: "TOTAL RUNS", value: agent.run_count || 0 },
-            { label: "AUTONOMY", value: `${agent.autonomy_level || 0}/10`, color: C.amber },
-            { label: "LAST RUN", value: agent.last_run?.run_date ? String(agent.last_run.run_date).slice(0, 10) : "never" },
+            { label: "AUTONOMY",   value: `${agent.autonomy_level || 0}/10`, color: C.amber },
+            { label: "LAST RUN",   value: agent.last_run?.run_date ? String(agent.last_run.run_date).slice(0, 10) : "never" },
             ...Object.entries(agent.metrics || {}).map(([k, v]) => ({
               label: k.toUpperCase().replace(/_/g, " "),
               value: v != null ? (v < 1.5 ? (v * 100).toFixed(0) + "%" : v.toFixed(1)) : "—",
@@ -951,8 +1121,7 @@ function AgentLog({ agentName, entries, accent = C.accent, isActive }) {
   useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [entries, isActive]);
   const relevant = entries.filter(e => e.agent === agentName.toUpperCase()).slice(-5);
   return (
-    <div style={{ background: C.bg, border: `1px solid ${isActive ? accent + "44" : C.border}`, borderRadius: 8,
-      overflow: "hidden", boxShadow: isActive ? `0 0 10px ${accent}22` : "none", marginTop: 4 }}>
+    <div style={{ background: C.bg, border: `1px solid ${isActive ? accent + "44" : C.border}`, borderRadius: 8, overflow: "hidden" }}>
       <div style={{ padding: "5px 12px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 8 }}>
         <span style={{ ...F, fontSize: 7, color: C.muted, letterSpacing: 2 }}>AGENT LOG</span>
         {isActive && <StatusDot color={accent} pulse />}
@@ -965,64 +1134,13 @@ function AgentLog({ agentName, entries, accent = C.accent, isActive }) {
             <span style={{ marginLeft: 7 }}>{entry.message}</span>
           </div>
         ))}
-        {isActive && <div style={{ ...F, fontSize: 9, color: accent, lineHeight: 1.7 }}>processing<span style={{ animation: "blink 1s step-end infinite" }}>_</span></div>}
+        {isActive && <div style={{ ...F, fontSize: 9, color: accent }}>processing<span style={{ animation: "blink 1s step-end infinite" }}>_</span></div>}
       </div>
     </div>
   );
 }
 
-// ─── Listing page ───────────────────────────────────────────
-function ListingPage({ listings, activeAgent, onSelect, entries }) {
-  const state = activeAgent === "Snoopy" ? "running" : listings.length > 0 ? "waiting" : "idle";
-  return (
-    <div style={{ padding: "20px 22px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
-        <ListingCat color={C.cyan} size={34} />
-        <div>
-          <div style={{ ...F, fontSize: 16, fontWeight: 700, color: C.cyan, letterSpacing: 2 }}>SNOOPY</div>
-          <div style={{ ...F, fontSize: 9, color: C.muted }}>SEO & LISTING COPY</div>
-        </div>
-        {state === "running" && <Badge text="RUNNING" color={C.success} />}
-        {listings.length > 0 && <Badge text={`${listings.length} READY`} color={C.cyan} />}
-        <div style={{ marginLeft: "auto" }}>
-          <GhostBtn onClick={() => deleteByStatus(["ready_to_upload"])} style={{ fontSize: 10 }}>[ CLEAR UPLOADED ]</GhostBtn>
-        </div>
-      </div>
-
-      {listings.length === 0
-        ? <EmptyState text="NO LISTINGS READY — APPROVE PACKAGES FIRST" />
-        : (
-          <>
-            <Label style={{ marginBottom: 10 }}>READY TO UPLOAD ({listings.length})</Label>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10 }}>
-              {listings.map(l => (
-                <div key={l.id} onClick={() => onSelect(l)}
-                  style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden", cursor: "pointer", transition: "all 0.15s" }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = C.cyan; e.currentTarget.style.boxShadow = C.glowCyan; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.boxShadow = "none"; }}>
-                  {l.image_url && (
-                    <div style={{ position: "relative" }}>
-                      <img src={l.image_url} alt={l.title} style={{ width: "100%", height: 140, objectFit: "cover", display: "block" }} />
-                      {l.price && <span style={{ position: "absolute", bottom: 6, left: 8, ...F, fontSize: 13, fontWeight: 700, color: C.cyan, background: "rgba(0,0,0,0.85)", padding: "2px 7px", borderRadius: 4 }}>{l.price}</span>}
-                    </div>
-                  )}
-                  <div style={{ padding: "10px 11px" }}>
-                    <div style={{ ...F, fontSize: 9, color: C.text, marginBottom: 5, lineHeight: 1.4 }}>{l.title?.slice(0, 52)}{l.title?.length > 52 ? "…" : ""}</div>
-                    <div style={{ ...F, fontSize: 8, color: C.muted, marginBottom: 8 }}>{l.tags?.split(",").length || 0} tags</div>
-                    <CyanBtn onClick={e => e.stopPropagation()} style={{ width: "100%", padding: "5px 0", fontSize: 10 }}>[ POST TO ETSY ]</CyanBtn>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
-        )
-      }
-      <div style={{ marginTop: 12 }}><AgentLog agentName="Snoopy" entries={entries} accent={C.cyan} isActive={state === "running"} /></div>
-    </div>
-  );
-}
-
-// ─── Feedback / Waffle page ─────────────────────────────────
+// ─── Feedback / Waffle ──────────────────────────────────────
 function FeedbackPage({ entries }) {
   return (
     <div style={{ padding: "20px 22px" }}>
@@ -1054,7 +1172,7 @@ function LogsPage({ logs }) {
       {logs.length === 0 ? <EmptyState text="NO RUNS RECORDED YET" /> : (
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
           <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 0.6fr 0.6fr 0.6fr 0.8fr", padding: "8px 16px", borderBottom: `1px solid ${C.border}` }}>
-            {["DATE", "DURATION", "PROPS", "DESIGNS", "LISTINGS", "STATUS"].map(h => (
+            {["DATE","DURATION","PROPS","DESIGNS","LISTINGS","STATUS"].map(h => (
               <div key={h} style={{ ...F, fontSize: 7, color: C.muted, letterSpacing: 1.5 }}>{h}</div>
             ))}
           </div>
@@ -1078,12 +1196,12 @@ function LogsPage({ logs }) {
   );
 }
 
-// ─── Memory page ────────────────────────────────────────────
+// ─── Memory page ─────────────────────────────────────────────
 function MemoryPage({ memory }) {
   const [filter, setFilter] = useState("all");
   const cats  = ["all", ...Array.from(new Set(memory.map(m => m.category)))];
   const shown = filter === "all" ? memory : memory.filter(m => m.category === filter);
-  const catColor = (c) => ({ approved: C.success, rejected: C.danger, trend: C.cyan, avoid: C.amber })[c] || C.accent;
+  const catColor = (c) => ({ approved: C.success, rejected: C.danger, trend: C.cyan, avoid: C.amber, brief: C.snow })[c] || C.accent;
   return (
     <div style={{ padding: "20px 22px" }}>
       <div style={{ ...F, fontSize: 14, color: C.accent, letterSpacing: 2, marginBottom: 4 }}>SNOW MEMORY</div>
@@ -1115,40 +1233,11 @@ function MemoryPage({ memory }) {
   );
 }
 
-// ─── Listing modal ──────────────────────────────────────────
-function ListingModal({ listing, onClose }) {
-  return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,8,0.96)",
-      display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, cursor: "pointer" }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: C.card, border: `1px solid ${C.accent}`,
-        borderRadius: 12, overflow: "hidden", maxWidth: 640, width: "92%", cursor: "default",
-        display: "grid", gridTemplateColumns: "1fr 1fr", boxShadow: C.glowSnow }}>
-        {listing.image_url && (
-          <img src={listing.image_url} alt={listing.title}
-            style={{ width: "100%", height: "100%", minHeight: 320, objectFit: "cover", display: "block" }} />
-        )}
-        <div style={{ padding: "20px 18px", overflowY: "auto", maxHeight: 480 }}>
-          <div style={{ ...F, fontSize: 13, color: C.text, marginBottom: 6, lineHeight: 1.4 }}>{listing.title}</div>
-          <div style={{ ...F, fontSize: 20, fontWeight: 700, color: C.cyan, marginBottom: 14 }}>{listing.price}</div>
-          <Label>Description</Label>
-          <div style={{ ...F, fontSize: 10, color: C.muted, lineHeight: 1.7, marginBottom: 12 }}>
-            {listing.description?.slice(0, 300)}{listing.description?.length > 300 ? "…" : ""}
-          </div>
-          <Label>Tags</Label>
-          <div style={{ ...F, fontSize: 9, color: `${C.muted}88`, lineHeight: 2, marginBottom: 16 }}>{listing.tags}</div>
-          <CyanBtn style={{ width: "100%", padding: "9px 0", fontSize: 11, marginBottom: 8, letterSpacing: 1 }}>[ POST TO ETSY ]</CyanBtn>
-          <GhostBtn onClick={onClose} style={{ width: "100%", padding: "8px 0", fontSize: 11 }}>[ CLOSE ]</GhostBtn>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Lock screen ────────────────────────────────────────────
+// ─── Lock screen ─────────────────────────────────────────────
 function LockScreen({ onUnlock }) {
-  const [pw, setPw]       = useState("");
+  const [pw, setPw] = useState("");
   const [error, setError] = useState(false);
-  const inputRef          = useRef(null);
+  const inputRef = useRef(null);
   useEffect(() => { inputRef.current?.focus(); }, []);
   const attempt = () => {
     if (pw === process.env.REACT_APP_DASHBOARD_PASSWORD) {
@@ -1166,51 +1255,49 @@ function LockScreen({ onUnlock }) {
         </div>
         <div style={{ fontSize: 22, fontWeight: 700, color: C.snow, letterSpacing: 4, marginBottom: 6 }}>PROJECTSNOW</div>
         <div style={{ fontSize: 10, color: C.muted, letterSpacing: 3, marginBottom: 40 }}>AGENT OPS v0.1</div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 8 }}>
           <input ref={inputRef} type="password" value={pw}
             onChange={e => setPw(e.target.value)} onKeyDown={e => e.key === "Enter" && attempt()}
             placeholder="password"
             style={{ ...F, background: C.card, border: `1px solid ${error ? C.danger : C.accent}66`,
               borderRadius: 8, padding: "9px 14px", color: C.text, fontSize: 12, width: 220,
-              outline: "none", caretColor: C.snow, letterSpacing: 2,
-              boxShadow: error ? `0 0 12px ${C.danger}44` : `0 0 12px ${C.accent}22` }} />
+              outline: "none", caretColor: C.snow, letterSpacing: 2 }} />
           <VioletBtn onClick={attempt} style={{ padding: "9px 20px", fontSize: 11, letterSpacing: 1.5, borderRadius: 8 }}>[ ENTER ]</VioletBtn>
         </div>
-        <div style={{ marginTop: 16, ...F, fontSize: 11, letterSpacing: 2, color: C.danger, height: 18, opacity: error ? 1 : 0 }}>
-          ACCESS DENIED
-        </div>
+        <div style={{ marginTop: 16, ...F, fontSize: 11, letterSpacing: 2, color: C.danger, height: 18, opacity: error ? 1 : 0 }}>ACCESS DENIED</div>
       </div>
       <style>{`@keyframes floatCat { 0%,100%{transform:translateY(0px)} 50%{transform:translateY(-8px)} }`}</style>
     </div>
   );
 }
 
-// ─── Page titles ────────────────────────────────────────────
+// ─── Page titles ─────────────────────────────────────────────
 const PAGE_TITLES = {
-  overview: "SNOW — COMMAND CENTER",
-  review:   "REVIEW — LEON × RIKO",
-  research: "LEON — RESEARCH",
-  design:   "RIKO — DESIGN",
-  listing:  "SNOOPY — LISTING",
-  feedback: "WAFFLE — FEEDBACK",
-  logs:     "PIPELINE LOGS",
-  memory:   "SNOW MEMORY",
+  overview:     "SNOW — COMMAND CENTER",
+  review:       "REVIEW ROOM — LEON × SNOW × RIKO",
+  ready_to_post:"READY TO POST",
+  research:     "LEON — RESEARCH",
+  design:       "RIKO — DESIGN",
+  feedback:     "WAFFLE — FEEDBACK",
+  logs:         "PIPELINE LOGS",
+  memory:       "SNOW MEMORY",
 };
 
-// ─── Root ───────────────────────────────────────────────────
+// ─── Root ─────────────────────────────────────────────────────
 export default function Dashboard() {
   const [unlocked, setUnlocked] = useState(() => !!localStorage.getItem("projectsnow_unlocked"));
 
-  const { packages, review: reviewPackage } = usePackages();
-  const { listings }       = useReadyListings();
-  const { status: ps }     = usePipelineStatus();
-  const { logs }           = usePipelineLogs();
-  const { memory }         = useSnowMemory();
+  const { packages, review: reviewPackage } = usePackages(); // pending_review only (for badge)
+  const { allPackages, refresh: refreshAll } = useAllProductionPackages(); // all statuses with all fields
+  const listings = allPackages.filter(p => p.status === "ready_to_upload");
 
-  const [activePage, setActivePage]         = useState("overview");
-  const [keywords, setKeywords]             = useState("");
-  const [launching, setLaunching]           = useState(false);
-  const [selectedListing, setSelectedListing] = useState(null);
+  const { status: ps } = usePipelineStatus();
+  const { logs }       = usePipelineLogs();
+  const { memory }     = useSnowMemory();
+
+  const [activePage, setActivePage]     = useState("overview");
+  const [keywords, setKeywords]         = useState("");
+  const [launching, setLaunching]       = useState(false);
 
   const activeAgent  = ps?.active_agent;
   const isRunning    = ps?.running;
@@ -1218,7 +1305,6 @@ export default function Dashboard() {
 
   const activityEntries = useActivityLog(ps, logs);
 
-  // Agent dots for sidebar
   const agentsStatus = useAgentsStatus();
   const agentDots = {
     review:  packages.length > 0 ? C.amber : C.muted,
@@ -1226,25 +1312,23 @@ export default function Dashboard() {
     waffle:  agentDotColor(agentsStatus.find(a => a.name === "Waffle")),
   };
 
-  const counts = { review: packages.length, listing: listings.length };
+  const counts = { review: packages.length, ready_to_post: listings.length };
 
   const callEndpoint = async (url) => { setLaunching(true); try { await fetch(url, { method: "POST" }); } catch (_) {} setTimeout(() => setLaunching(false), 2000); };
-  const launch       = () => callEndpoint(`${API}/launch?keywords=${encodeURIComponent(keywords)}`);
-  const runStep2     = () => callEndpoint(`${API}/step2`);
-  const runStep3     = () => callEndpoint(`${API}/step3`);
-  const stopPipeline = async () => { try { await fetch(`${API}/stop`,  { method: "POST" }); } catch (_) {} };
-  const resetPipeline= async () => { try { await fetch(`${API}/reset`, { method: "POST" }); } catch (_) {} };
-  const fullReset    = async () => { if (!window.confirm("Delete ALL Airtable records and reset the pipeline?")) return; try { await fetch(`${API}/reset/airtable`, { method: "POST" }); } catch (_) {} };
+  const launch        = () => callEndpoint(`${API}/launch?keywords=${encodeURIComponent(keywords)}`);
+  const runStep2      = () => callEndpoint(`${API}/step2`);
+  const runStep3      = () => callEndpoint(`${API}/step3`);
+  const stopPipeline  = async () => { try { await fetch(`${API}/stop`,  { method: "POST" }); } catch (_) {} };
+  const resetPipeline = async () => { try { await fetch(`${API}/reset`, { method: "POST" }); } catch (_) {} };
+  const fullReset     = async () => { if (!window.confirm("Delete ALL Airtable records and reset the pipeline?")) return; try { await fetch(`${API}/reset/airtable`, { method: "POST" }); } catch (_) {} };
 
   if (!unlocked) return <LockScreen onUnlock={() => setUnlocked(true)} />;
 
   return (
     <div style={{ display: "flex", height: "100vh", background: C.bg, color: C.text, overflow: "hidden" }}>
-
       <Sidebar active={activePage} setActive={setActivePage} counts={counts} agentDots={agentDots} />
 
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
-
         {/* Header */}
         <div style={{ height: 46, borderBottom: `1px solid ${C.border}`, display: "flex",
           alignItems: "center", gap: 10, padding: "0 16px", flexShrink: 0, background: C.bg }}>
@@ -1259,7 +1343,7 @@ export default function Dashboard() {
             </div>
           )}
           <div style={{ flex: 1 }} />
-          {[["LISTINGS", listings.length], ["VIEWS", 0], ["SALES", 0]].map(([label, val]) => (
+          {[["READY", listings.length], ["VIEWS", 0], ["SALES", 0]].map(([label, val]) => (
             <div key={label} style={{ textAlign: "right", paddingLeft: 14, borderLeft: `1px solid ${C.border}` }}>
               <div style={{ ...F, fontSize: 14, fontWeight: 700, color: C.text, lineHeight: 1 }}>{val}</div>
               <div style={{ ...F, fontSize: 7, color: C.muted, marginTop: 2, letterSpacing: 1 }}>{label}</div>
@@ -1282,41 +1366,52 @@ export default function Dashboard() {
           <div style={{ padding: "6px 16px", background: `${C.cyan}0e`, borderBottom: `1px solid ${C.cyan}33`,
             display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
             <StatusDot color={C.cyan} pulse />
-            <span style={{ ...F, fontSize: 9, color: C.cyan, letterSpacing: 1.5 }}>
-              PACKAGES APPROVED — CLICK [ RUN SNOOPY ] TO WRITE LISTINGS
-            </span>
+            <span style={{ ...F, fontSize: 9, color: C.cyan, letterSpacing: 1.5 }}>PACKAGES APPROVED — CLICK [ RUN SNOOPY ] TO WRITE LISTINGS</span>
           </div>
         )}
         {!isRunning && pipelineStep === "complete" && (
           <div style={{ padding: "6px 16px", background: `${C.success}0e`, borderBottom: `1px solid ${C.success}33`,
             display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
             <StatusDot color={C.success} pulse />
-            <span style={{ ...F, fontSize: 9, color: C.success, letterSpacing: 1.5 }}>
-              PIPELINE COMPLETE — CHECK SNOOPY'S LISTINGS
-            </span>
+            <span style={{ ...F, fontSize: 9, color: C.success, letterSpacing: 1.5 }}>PIPELINE COMPLETE — CHECK READY TO POST</span>
           </div>
         )}
 
-        {/* Page content */}
+        {/* Pages */}
         <div style={{ flex: 1, overflowY: "auto" }}>
-          {activePage === "overview"  && <OverviewPage setActive={setActivePage} pipelineStatus={ps} packages={packages} listings={listings}
-            launchProps={{ keywords, setKeywords, launching, launch, runStep2, runStep3, stopPipeline, resetPipeline, fullReset }} />}
-          {activePage === "review"    && <ReviewPage packages={packages} reviewPackage={reviewPackage} activeAgent={activeAgent} runStep2={runStep2} />}
+          {activePage === "overview"  && (
+            <OverviewPage
+              setActive={setActivePage}
+              pipelineStatus={ps}
+              pendingPackages={packages}
+              listings={listings}
+              allPackages={allPackages}
+              launchProps={{ keywords, setKeywords, launching, launch, runStep2, runStep3, stopPipeline, resetPipeline, fullReset }}
+            />
+          )}
+          {activePage === "review"  && (
+            <ReviewPage
+              allPackages={allPackages}
+              reviewPackage={reviewPackage}
+              activeAgent={activeAgent}
+              runStep2={runStep2}
+              pipelineStatus={ps}
+              refresh={refreshAll}
+            />
+          )}
+          {activePage === "ready_to_post" && <ReadyToPostPage listings={listings} />}
           {activePage === "research"  && <AgentHistoryPage name="LEON"   role="Market Research Specialist" Cat={ResearchCat} accent={C.accent} entries={activityEntries} activeAgent={activeAgent} />}
           {activePage === "design"    && <AgentHistoryPage name="RIKO"   role="Visual Design Specialist"    Cat={DesignCat}   accent={C.accent} entries={activityEntries} activeAgent={activeAgent} />}
-          {activePage === "listing"   && <ListingPage listings={listings} activeAgent={activeAgent} onSelect={setSelectedListing} entries={activityEntries} />}
           {activePage === "feedback"  && <FeedbackPage entries={activityEntries} />}
           {activePage === "logs"      && <LogsPage logs={logs} />}
           {activePage === "memory"    && <MemoryPage memory={memory} />}
         </div>
       </div>
 
-      {/* Right column — Snow chat */}
+      {/* Right chat column */}
       <div style={{ width: 320, flexShrink: 0, borderLeft: `1px solid ${C.border}`, height: "100vh", display: "flex", flexDirection: "column" }}>
         <SnowChat />
       </div>
-
-      {selectedListing && <ListingModal listing={selectedListing} onClose={() => setSelectedListing(null)} />}
 
       <style>{`
         * { box-sizing: border-box; }

@@ -31,14 +31,17 @@ export function usePackages() {
         `https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}?filterByFormula={status}="pending_review"&sort[0][field]=created_at&sort[0][direction]=asc`
       );
       setPackages((data.records || []).map(r => ({
-        id:           r.id,
-        title:        r.fields.title        || "",
-        niche:        r.fields.niche        || "",
-        keyword:      r.fields.keyword      || "",
-        why_it_sells: r.fields.why_it_sells || "",
-        image_url:    r.fields.image_url    || "",
-        image_prompt: r.fields.image_prompt || "",
-        status:       r.fields.status,
+        id:              r.id,
+        title:           r.fields.title           || "",
+        niche:           r.fields.niche           || "",
+        keyword:         r.fields.keyword         || "",
+        why_it_sells:    r.fields.why_it_sells    || "",
+        image_url:       r.fields.image_url       || "",
+        mockup_url:      r.fields.mockup_url      || "",
+        image_prompt:    r.fields.image_prompt    || "",
+        snow_brief:      r.fields.snow_brief      || "",
+        suggested_price: r.fields.suggested_price || "",
+        status:          r.fields.status,
       })));
     } catch (e) {}
   };
@@ -149,13 +152,16 @@ export function useReadyListings() {
       `https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}?filterByFormula={status}="ready_to_upload"`
     );
     setListings((data.records || []).map(r => ({
-      id:          r.id,
-      title:       r.fields.title       || "",
-      niche:       r.fields.niche       || "",
-      image_url:   r.fields.image_url   || "",
-      price:       r.fields.price       || "",
-      tags:        r.fields.tags        || "",
-      description: r.fields.description || "",
+      id:              r.id,
+      title:           r.fields.title           || "",
+      niche:           r.fields.niche           || "",
+      image_url:       r.fields.image_url       || "",
+      mockup_url:      r.fields.mockup_url      || "",
+      snow_brief:      r.fields.snow_brief      || "",
+      suggested_price: r.fields.suggested_price || "",
+      price:           r.fields.price           || "",
+      tags:            r.fields.tags            || "",
+      description:     r.fields.description     || "",
     })));
   };
 
