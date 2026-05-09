@@ -1355,6 +1355,8 @@ export default function Dashboard() {
   const launch   = () => callEndpoint(`${API}/launch?keywords=${encodeURIComponent(keywords)}`);
   const runStep2 = () => callEndpoint(`${API}/step2`);
   const runStep3 = () => callEndpoint(`${API}/step3`);
+  const stopPipeline  = async () => { try { await fetch(`${API}/stop`,  { method: "POST" }); } catch (_) {} };
+  const resetPipeline = async () => { try { await fetch(`${API}/reset`, { method: "POST" }); } catch (_) {} };
 
   if (!unlocked) return <LockScreen onUnlock={() => setUnlocked(true)} />;
 
@@ -1380,10 +1382,10 @@ export default function Dashboard() {
             onBlur={e => e.target.style.borderColor = C.border}
           />
           {isRunning ? (
-            <GhostBtn disabled style={{ fontSize: 11, letterSpacing: 1,
-              animation: "pulse 1.4s ease-in-out infinite", borderColor: C.active + "44", color: C.muted }}>
-              [ GO NAP ]
-            </GhostBtn>
+            <RedBtn onClick={stopPipeline} style={{ fontSize: 11, letterSpacing: 1,
+              animation: "pulse 1.4s ease-in-out infinite" }}>
+              [ STOP ]
+            </RedBtn>
           ) : launching ? (
             <GhostBtn disabled style={{ fontSize: 11, letterSpacing: 1, color: C.muted }}>LAUNCHING...</GhostBtn>
           ) : pipelineStep === "waiting_approval" ? (
@@ -1397,6 +1399,7 @@ export default function Dashboard() {
           ) : (
             <GreenBtn onClick={launch} style={{ fontSize: 11, letterSpacing: 1 }}>[ GO WORK ]</GreenBtn>
           )}
+          <GhostBtn onClick={resetPipeline} style={{ fontSize: 11, letterSpacing: 1 }}>[ RESET ]</GhostBtn>
           {isRunning && (
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <StatusDot state="running" />
