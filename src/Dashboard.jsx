@@ -546,7 +546,7 @@ function RoomsView({ agentsStatus, pendingPackages, listings, setActive }) {
 
 // ─── Snow Overview page ─────────────────────────────────────
 function OverviewPage({ setActive, pipelineStatus, pendingPackages, listings, allPackages, launchProps = {} }) {
-  const { keywords = "", setKeywords, launching, launch, runStep3: lr3, stopPipeline, resetPipeline, fullReset } = launchProps;
+  const { keywords = "", setKeywords, launching, launch, runStep2: lr2, runStep3: lr3, stopPipeline, resetPipeline, fullReset } = launchProps;
   const isRunning    = pipelineStatus?.running;
   const pipelineStep = pipelineStatus?.status;
   const { decisions, resolve } = usePendingDecisions();
@@ -648,8 +648,10 @@ function OverviewPage({ setActive, pipelineStatus, pendingPackages, listings, al
             <RedBtn onClick={stopPipeline} style={{ width: "100%", padding: "9px 0", fontSize: 11, letterSpacing: 1, animation: "pulse 1.4s ease-in-out infinite" }}>[ STOP PIPELINE ]</RedBtn>
           ) : launching ? (
             <GhostBtn disabled style={{ width: "100%", padding: "9px 0", fontSize: 11 }}>LAUNCHING...</GhostBtn>
-          ) : pipelineStep === "waiting_review" ? (
+          ) : pipelineStep === "waiting_review" && packages.length > 0 ? (
             <AmberBtn onClick={() => setActive("review")} style={{ width: "100%", padding: "9px 0", fontSize: 11, letterSpacing: 1 }}>[ APPROVE PACKAGES ]</AmberBtn>
+          ) : pipelineStep === "waiting_strategy" || (pipelineStep === "waiting_review" && packages.length === 0) ? (
+            <GreenBtn onClick={lr2} style={{ width: "100%", padding: "9px 0", fontSize: 11, letterSpacing: 1 }}>[ RUN STRATEGY ]</GreenBtn>
           ) : pipelineStep === "waiting_listing" ? (
             <CyanBtn onClick={lr3} style={{ width: "100%", padding: "9px 0", fontSize: 11, letterSpacing: 1 }}>[ RUN SNOOPY ]</CyanBtn>
           ) : (
@@ -765,11 +767,24 @@ function ReviewPage({ allPackages, reviewPackage, activeAgent, runStep2, pipelin
   const pending = allPackages.filter(p => p.status === "pending_review");
   const pipeline = allPackages.filter(p => p.status !== "rejected");
 
+  const notifyStrategyReady = async () => {
+    try {
+      await fetch(`${API}/update_status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "waiting_strategy", step: 2, running: false }),
+      });
+    } catch (_) {}
+  };
+
   const handleApprove = async (pkg) => {
     await reviewPackage(pkg.id, "strategy_review", {
       title: pkg.title, niche: pkg.niche, keyword: pkg.keyword, snow_brief: pkg.snow_brief,
     });
-    setSessionReviewed(n => n + 1);
+    const newCount = sessionReviewed + 1;
+    setSessionReviewed(newCount);
+    // If this was the last pending package, update pipeline status
+    if (pending.length === 1) notifyStrategyReady();
   };
 
   const handleReject = async (pkg) => {
@@ -779,7 +794,9 @@ function ReviewPage({ allPackages, reviewPackage, activeAgent, runStep2, pipelin
     });
     setRejectId(null);
     setRejectReason("");
-    setSessionReviewed(n => n + 1);
+    const newCount = sessionReviewed + 1;
+    setSessionReviewed(newCount);
+    if (pending.length === 1) notifyStrategyReady();
   };
 
   const handleDelete = async (id) => {
@@ -1346,13 +1363,22 @@ export default function Dashboard() {
         </div>
 
         {/* Status banners */}
-        {!isRunning && pipelineStep === "waiting_review" && (
+        {!isRunning && pipelineStep === "waiting_review" && packages.length > 0 && (
           <div style={{ padding: "6px 16px", background: `${C.amber}0e`, borderBottom: `1px solid ${C.amber}33`,
             display: "flex", alignItems: "center", gap: 8, flexShrink: 0, cursor: "pointer" }}
             onClick={() => setActivePage("review")}>
             <StatusDot color={C.amber} />
             <span style={{ ...F, fontSize: 9, color: C.amber, letterSpacing: 1.5 }}>
               {packages.length} PACKAGE{packages.length !== 1 ? "S" : ""} WAITING FOR REVIEW — CLICK TO REVIEW
+            </span>
+          </div>
+        )}
+        {!isRunning && (pipelineStep === "waiting_strategy" || (pipelineStep === "waiting_review" && packages.length === 0)) && (
+          <div style={{ padding: "6px 16px", background: `${C.success}0e`, borderBottom: `1px solid ${C.success}33`,
+            display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+            <StatusDot color={C.success} pulse />
+            <span style={{ ...F, fontSize: 9, color: C.success, letterSpacing: 1.5 }}>
+              ALL PACKAGES REVIEWED — CLICK [ RUN STRATEGY ] TO PROCEED
             </span>
           </div>
         )}
