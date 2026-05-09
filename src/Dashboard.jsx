@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   useProposals, useDesigns, useReadyListings,
   useSnowReport, usePipelineStatus, usePipelineLogs, useSnowMemory
@@ -304,6 +304,145 @@ const TermLine = ({ text, color = C.muted }) => (
   </div>
 );
 
+// ─── Activity log hook ────────────────────────────────────
+// Accumulates pipeline events from polling + seeds from Airtable run history
+function useActivityLog(pipelineStatus, logs) {
+  const [entries, setEntries] = useState([]);
+  const lastTs   = useRef(null);
+  const lastTask = useRef(null);
+  const seeded   = useRef(false);
+
+  // Seed from PipelineLogs once
+  useEffect(() => {
+    if (seeded.current || logs.length === 0) return;
+    seeded.current = true;
+    const initial = [...logs].reverse().slice(-6).map((log, i) => ({
+      id:      `seed-${i}`,
+      time:    log.date ? String(log.date).slice(0, 10) : "—",
+      agent:   "PIPELINE",
+      message: `run complete — ${log.proposals} proposals · ${log.designs} designs · ${log.listings} listings — ${(log.status || "").toUpperCase()}`,
+      type:    log.status === "success" ? "success" : log.status === "failed" ? "error" : "warning",
+    }));
+    setEntries(initial);
+  }, [logs]);
+
+  // Append whenever pipelineStatus changes meaningfully
+  useEffect(() => {
+    if (!pipelineStatus?.timestamp) return;
+    const { timestamp, active_agent, current_task, running, status } = pipelineStatus;
+    if (timestamp === lastTs.current && current_task === lastTask.current) return;
+    lastTs.current   = timestamp;
+    lastTask.current = current_task;
+
+    const d    = new Date(timestamp);
+    const time = isNaN(d) ? "—" : d.toTimeString().slice(0, 8);
+    const agent   = (active_agent || "SYSTEM").toUpperCase();
+    const message = current_task || (running ? "processing..." : `status: ${status || "idle"}`);
+    const type = !running && status === "complete"          ? "success"
+               : !running && status?.startsWith("waiting") ? "warning"
+               : running                                    ? "info"
+               :                                             "info";
+
+    setEntries(prev => [
+      ...prev,
+      { id: `${timestamp}-${agent}-${message}`, time, agent, message, type },
+    ].slice(-60));
+  }, [pipelineStatus]);
+
+  return entries;
+}
+
+// ─── System log terminal (Overview) ──────────────────────
+function SystemLog({ entries }) {
+  const scrollRef = useRef(null);
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [entries]);
+
+  const lineColor = (type) => {
+    if (type === "success") return C.active;
+    if (type === "error")   return C.danger;
+    if (type === "warning") return C.amber;
+    return C.cyan;
+  };
+
+  const shown = entries.slice(-10);
+
+  return (
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6,
+      overflow: "hidden", marginBottom: 18 }}>
+      <div style={{ padding: "7px 14px", borderBottom: `1px solid ${C.border}`,
+        display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ ...F, fontSize: 9, color: C.active, letterSpacing: 2 }}>SYSTEM LOG</span>
+        <span style={{ width: 6, height: 6, borderRadius: "50%", background: C.active,
+          display: "inline-block", animation: "pulse 1.4s ease-in-out infinite",
+          boxShadow: `0 0 5px ${C.active}` }} />
+      </div>
+      <div ref={scrollRef} style={{ background: "#050505", padding: "10px 14px", height: 190,
+        overflowY: "auto", display: "flex", flexDirection: "column", gap: 1 }}>
+        {shown.length === 0 && (
+          <span style={{ ...F, fontSize: 10, color: C.muted }}>Waiting for pipeline activity...</span>
+        )}
+        {shown.map(entry => (
+          <div key={entry.id} style={{ ...F, fontSize: 10, lineHeight: 1.8,
+            animation: "termEntry 0.2s ease forwards" }}>
+            <span style={{ color: "#334433" }}>[{entry.time}]</span>
+            <span style={{ color: C.active, margin: "0 7px" }}>{entry.agent}</span>
+            <span style={{ color: "#223322" }}>—</span>
+            <span style={{ marginLeft: 7, color: lineColor(entry.type) }}>{entry.message}</span>
+          </div>
+        ))}
+        <div style={{ ...F, fontSize: 10, color: C.active, animation: "blink 1.1s step-end infinite",
+          marginTop: 2, lineHeight: 1 }}>_</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Agent log terminal (per-agent pages) ─────────────────
+function AgentLog({ agentName, entries, isActive }) {
+  const scrollRef = useRef(null);
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [entries, isActive]);
+
+  const relevant = entries
+    .filter(e => e.agent === agentName.toUpperCase())
+    .slice(-5);
+
+  return (
+    <div style={{ margin: "0 26px 24px", background: "#050505",
+      border: `1px solid ${isActive ? C.active + "44" : C.border}`,
+      borderRadius: 6, overflow: "hidden",
+      boxShadow: isActive ? C.glow : "none", transition: "border-color 0.3s" }}>
+      <div style={{ padding: "5px 12px", borderBottom: `1px solid ${isActive ? C.active + "22" : C.faint}`,
+        display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ ...F, fontSize: 8, color: C.muted, letterSpacing: 2 }}>AGENT LOG</span>
+        {isActive && <StatusDot state="running" />}
+      </div>
+      <div ref={scrollRef} style={{ padding: "8px 12px", height: 110, overflowY: "auto",
+        display: "flex", flexDirection: "column", gap: 1 }}>
+        {relevant.length === 0 && !isActive && (
+          <span style={{ ...F, fontSize: 10, color: "#2a3a2a" }}>No activity this session.</span>
+        )}
+        {relevant.map(entry => (
+          <div key={entry.id} style={{ ...F, fontSize: 10, color: C.active,
+            lineHeight: 1.7, animation: "termEntry 0.2s ease forwards" }}>
+            <span style={{ color: "#334433" }}>[{entry.time}]</span>
+            <span style={{ marginLeft: 7, color: C.active }}>{entry.message}</span>
+          </div>
+        ))}
+        {isActive && (
+          <div style={{ ...F, fontSize: 10, color: C.active, lineHeight: 1.7 }}>
+            processing
+            <span style={{ animation: "blink 1s step-end infinite" }}>_</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Overview page ────────────────────────────────────────
 function SnowChat() {
   const [input, setInput] = useState("");
@@ -361,7 +500,7 @@ function SnowChat() {
   );
 }
 
-function OverviewPage({ report, pipelineStatus, proposals, designs, listings, memory }) {
+function OverviewPage({ report, pipelineStatus, proposals, designs, listings, memory, entries }) {
   const steps = ["INIT", "SNOW", "RESEARCH", "DESIGN", "LISTING", "FEEDBACK"];
   const agentToStep = { "Snow": 1, "Research Agent": 2, "Design Agent": 3, "Listing Agent": 4, "Feedback Agent": 5 };
   const activeIdx = pipelineStatus?.running ? (agentToStep[pipelineStatus?.active_agent] ?? 0) : -1;
@@ -410,6 +549,9 @@ function OverviewPage({ report, pipelineStatus, proposals, designs, listings, me
           })}
         </div>
       </div>
+
+      {/* System log */}
+      <SystemLog entries={entries} />
 
       {/* Stats row */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 18 }}>
@@ -468,7 +610,7 @@ function OverviewPage({ report, pipelineStatus, proposals, designs, listings, me
 }
 
 // ─── Research page ────────────────────────────────────────
-function ResearchPage({ proposals, decide, activeAgent, refresh }) {
+function ResearchPage({ proposals, decide, activeAgent, refresh, entries }) {
   const state = activeAgent === "Research Agent" ? "running" : proposals.filter(p => p.status === "pending").length > 0 ? "waiting" : "idle";
   const pending = proposals.filter(p => p.status === "pending");
   const decided = proposals.filter(p => p.status !== "pending");
@@ -521,12 +663,13 @@ function ResearchPage({ proposals, decide, activeAgent, refresh }) {
 
         {proposals.length === 0 && <EmptyState text="NO PROPOSALS — LAUNCH THE PIPELINE" />}
       </div>
+      <AgentLog agentName="Research Agent" entries={entries} isActive={state === "running"} />
     </div>
   );
 }
 
 // ─── Design page ──────────────────────────────────────────
-function DesignPage({ designs, decideDesign, activeAgent, onSelect, refresh }) {
+function DesignPage({ designs, decideDesign, activeAgent, onSelect, refresh, entries }) {
   const state = activeAgent === "Design Agent" ? "running" : designs.length > 0 ? "waiting" : "idle";
   return (
     <div>
@@ -576,12 +719,13 @@ function DesignPage({ designs, decideDesign, activeAgent, onSelect, refresh }) {
           )
         }
       </div>
+      <AgentLog agentName="Design Agent" entries={entries} isActive={state === "running"} />
     </div>
   );
 }
 
 // ─── Listing page ─────────────────────────────────────────
-function ListingPage({ listings, activeAgent, onSelect, refresh }) {
+function ListingPage({ listings, activeAgent, onSelect, refresh, entries }) {
   const state = activeAgent === "Listing Agent" ? "running" : listings.length > 0 ? "waiting" : "idle";
   return (
     <div>
@@ -633,6 +777,7 @@ function ListingPage({ listings, activeAgent, onSelect, refresh }) {
           )
         }
       </div>
+      <AgentLog agentName="Listing Agent" entries={entries} isActive={state === "running"} />
     </div>
   );
 }
@@ -651,7 +796,7 @@ function StrategyPage() {
 }
 
 // ─── Feedback page ────────────────────────────────────────
-function FeedbackPage() {
+function FeedbackPage({ entries }) {
   return (
     <div>
       <AgentPageHeader CatComp={FeedbackCat} name="FEEDBACK AGENT" sub="claude-haiku-4.5 — Performance tracker & weekly recap" state="idle" />
@@ -669,6 +814,7 @@ function FeedbackPage() {
           <div style={{ ...F, fontSize: 10, color: "#222", marginTop: 8, letterSpacing: 1 }}>Requires active Etsy listings to populate charts</div>
         </div>
       </div>
+      <AgentLog agentName="Feedback Agent" entries={entries} isActive={false} />
     </div>
   );
 }
@@ -840,6 +986,8 @@ export default function Dashboard() {
   const isRunning = pipelineStatus?.running;
   const pipelineStep = pipelineStatus?.status;
 
+  const activityEntries = useActivityLog(pipelineStatus, logs);
+
   const agentNameToPage = { "Research Agent": "research", "Design Agent": "design", "Listing Agent": "listing", "Feedback Agent": "feedback" };
   const agentStates = Object.fromEntries(
     Object.keys(PAGE_TITLES).map(id => {
@@ -967,12 +1115,12 @@ export default function Dashboard() {
 
         {/* Page content */}
         <div style={{ flex: 1, overflowY: "auto" }}>
-          {activePage === "overview"  && <OverviewPage report={report} pipelineStatus={pipelineStatus} proposals={proposals} designs={designs} listings={listings} memory={memory} />}
-          {activePage === "research"  && <ResearchPage proposals={proposals} decide={decide} activeAgent={activeAgent} refresh={noop} />}
-          {activePage === "design"    && <DesignPage designs={designs} decideDesign={decideDesign} activeAgent={activeAgent} onSelect={setSelectedDesign} refresh={noop} />}
+          {activePage === "overview"  && <OverviewPage report={report} pipelineStatus={pipelineStatus} proposals={proposals} designs={designs} listings={listings} memory={memory} entries={activityEntries} />}
+          {activePage === "research"  && <ResearchPage proposals={proposals} decide={decide} activeAgent={activeAgent} refresh={noop} entries={activityEntries} />}
+          {activePage === "design"    && <DesignPage designs={designs} decideDesign={decideDesign} activeAgent={activeAgent} onSelect={setSelectedDesign} refresh={noop} entries={activityEntries} />}
           {activePage === "strategy"  && <StrategyPage />}
-          {activePage === "listing"   && <ListingPage listings={listings} activeAgent={activeAgent} onSelect={setSelectedListing} refresh={noop} />}
-          {activePage === "feedback"  && <FeedbackPage />}
+          {activePage === "listing"   && <ListingPage listings={listings} activeAgent={activeAgent} onSelect={setSelectedListing} refresh={noop} entries={activityEntries} />}
+          {activePage === "feedback"  && <FeedbackPage entries={activityEntries} />}
           {activePage === "logs"      && <LogsPage logs={logs} />}
           {activePage === "memory"    && <MemoryPage memory={memory} />}
         </div>
@@ -1003,7 +1151,9 @@ export default function Dashboard() {
         ::-webkit-scrollbar-thumb { background: #1a1a1a; border-radius: 2px; }
         input::placeholder { color: #334433; }
         button:focus { outline: none; }
-        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
+        @keyframes pulse    { 0%,100%{opacity:1} 50%{opacity:0.35} }
+        @keyframes blink    { 0%,100%{opacity:1} 50%{opacity:0} }
+        @keyframes termEntry { from{opacity:0;transform:translateY(3px)} to{opacity:1;transform:translateY(0)} }
       `}</style>
     </div>
   );
