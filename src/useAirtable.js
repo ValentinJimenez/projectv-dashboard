@@ -1,128 +1,130 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 
 const BASE_ID = "appsS6oYAVqgJhe7H";
 const TABLE_ID = "tblIyWuFysf5Hxu8u";
 const API_KEY = process.env.REACT_APP_AIRTABLE_API_KEY;
 
+const headers = { Authorization: `Bearer ${API_KEY}` };
+
+async function airtableFetch(url) {
+  const res = await fetch(url, { headers });
+  return res.json();
+}
+
+async function airtablePatch(id, fields) {
+  await fetch(`https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}/${id}`, {
+    method: "PATCH",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ fields }),
+  });
+}
+
 export function useProposals() {
   const [proposals, setProposals] = useState([]);
-  const [loading, setLoading] = useState(true);
 
-  const fetchProposals = async () => {
-    try {
-      const res = await fetch(
-        `https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}?filterByFormula={status}="pending"`,
-        { headers: { Authorization: `Bearer ${API_KEY}` } }
-      );
-      const data = await res.json();
-      const mapped = data.records.map(r => ({
-        id: r.id,
-        title: r.fields.title,
-        meta: `${r.fields.niche} · ${r.fields.competition}`,
-        status: r.fields.status,
-      }));
-      setProposals(mapped);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
+  const fetch_ = async () => {
+    const data = await airtableFetch(
+      `https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}?filterByFormula=OR({status}="pending",{status}="approved",{status}="rejected")`
+    );
+    setProposals((data.records || []).map(r => ({
+      id: r.id,
+      title: r.fields.title,
+      meta: `${r.fields.niche || ""} · ${r.fields.competition || ""}`,
+      status: r.fields.status,
+    })));
   };
 
   const decide = async (id, decision) => {
-    await fetch(`https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}/${id}`, {
-      method: "PATCH",
-      headers: {
-        Authorization: `Bearer ${API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ fields: { status: decision } }),
-    });
-    fetchProposals();
+    await airtablePatch(id, { status: decision });
+    fetch_();
   };
 
-  useEffect(() => {
-    fetchProposals();
-    const interval = setInterval(fetchProposals, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  return { proposals, loading, decide };
+  useEffect(() => { fetch_(); const t = setInterval(fetch_, 30000); return () => clearInterval(t); }, []);
+  return { proposals, decide };
 }
 
 export function useDesigns() {
   const [designs, setDesigns] = useState([]);
 
-  const fetchDesigns = async () => {
-    try {
-      const res = await fetch(
-        `https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}?filterByFormula={status}="designed"`,
-        { headers: { Authorization: `Bearer ${API_KEY}` } }
-      );
-      const data = await res.json();
-      const mapped = data.records.map(r => ({
-        id: r.id,
-        title: r.fields.title,
-        image_url: r.fields.image_url,
-        tags: r.fields.tags,
-        status: r.fields.status,
-      }));
-      setDesigns(mapped);
-    } catch (e) {
-      console.error(e);
-    }
+  const fetch_ = async () => {
+    const data = await airtableFetch(
+      `https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}?filterByFormula={status}="designed"`
+    );
+    setDesigns((data.records || []).map(r => ({
+      id: r.id,
+      title: r.fields.title,
+      image_url: r.fields.image_url,
+      status: r.fields.status,
+    })));
   };
 
   const decideDesign = async (id, decision) => {
-    await fetch(`https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}/${id}`, {
-      method: "PATCH",
-      headers: {
-        Authorization: `Bearer ${API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ fields: { status: decision } }),
-    });
-    fetchDesigns();
+    await airtablePatch(id, { status: decision });
+    fetch_();
   };
 
-  useEffect(() => {
-    fetchDesigns();
-    const interval = setInterval(fetchDesigns, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
+  useEffect(() => { fetch_(); const t = setInterval(fetch_, 30000); return () => clearInterval(t); }, []);
   return { designs, decideDesign };
 }
+
 export function useReadyListings() {
   const [listings, setListings] = useState([]);
 
-  const fetchListings = async () => {
-    try {
-      const res = await fetch(
-        `https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}?filterByFormula={status}="ready_to_upload"`,
-        { headers: { Authorization: `Bearer ${API_KEY}` } }
-      );
-      const data = await res.json();
-      const mapped = data.records.map(r => ({
-        id: r.id,
-        title: r.fields.title,
-        image_url: r.fields.image_url,
-        price: r.fields.price,
-        tags: r.fields.tags,
-        description: r.fields.description,
-        status: r.fields.status,
-      }));
-      setListings(mapped);
-    } catch (e) {
-      console.error(e);
-    }
+  const fetch_ = async () => {
+    const data = await airtableFetch(
+      `https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}?filterByFormula={status}="ready_to_upload"`
+    );
+    setListings((data.records || []).map(r => ({
+      id: r.id,
+      title: r.fields.title,
+      image_url: r.fields.image_url,
+      price: r.fields.price,
+      tags: r.fields.tags,
+      description: r.fields.description,
+    })));
   };
 
+  useEffect(() => { fetch_(); const t = setInterval(fetch_, 30000); return () => clearInterval(t); }, []);
+  return { listings };
+}
+
+export function useSnowReport() {
+  const [report, setReport] = useState(null);
+
+  const fetch_ = async () => {
+    try {
+      const SNOW_TABLE = process.env.REACT_APP_SNOW_TABLE_ID;
+      if (!SNOW_TABLE) return;
+      const data = await airtableFetch(
+        `https://api.airtable.com/v0/${BASE_ID}/${SNOW_TABLE}?sort[0][field]=created_at&sort[0][direction]=desc&maxRecords=1`
+      );
+      if (data.records?.[0]) {
+        setReport(data.records[0].fields);
+      }
+    } catch (e) {}
+  };
+
+  useEffect(() => { fetch_(); const t = setInterval(fetch_, 60000); return () => clearInterval(t); }, []);
+  return { report };
+}
+
+export function usePipelineStatus() {
+  const [status, setStatus] = useState(null);
+
   useEffect(() => {
-    fetchListings();
-    const interval = setInterval(fetchListings, 30000);
-    return () => clearInterval(interval);
+    const fetch_ = async () => {
+      try {
+        const res = await fetch("http://localhost:8000/status");
+        const data = await res.json();
+        setStatus(data);
+      } catch (e) {
+        setStatus(null);
+      }
+    };
+    fetch_();
+    const t = setInterval(fetch_, 3000);
+    return () => clearInterval(t);
   }, []);
 
-  return { listings };
+  return { status };
 }
