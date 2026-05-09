@@ -4,333 +4,498 @@ import {
   useSnowReport, usePipelineStatus, usePipelineLogs, useSnowMemory
 } from "./useAirtable";
 
-// ── Color tokens ──────────────────────────────────────────
-const c = {
-  bg: "#0a0a0a",
-  card: "#111111",
-  border: "#1a1a1a",
-  text: "#e8e8e8",
-  muted: "#555555",
-  faint: "#222222",
-  accent: "#ffffff",
-  glow: "#333333",
-  green: "#4ade80",
-  greenDim: "#0a1f12",
-  red: "#f87171",
-  redDim: "#1f0a0a",
-  amber: "#fbbf24",
-  amberDim: "#1f1500",
+// ─── Design tokens ────────────────────────────────────────
+const C = {
+  bg:          "#080808",
+  card:        "#0d0d0d",
+  border:      "#00ff8822",
+  borderHover: "#00ff8855",
+  active:      "#00ff88",
+  text:        "#e8e8e8",
+  muted:       "#556655",
+  faint:       "#1a1a1a",
+  danger:      "#ff4444",
+  dangerDim:   "#1a0000",
+  amber:       "#ffbb44",
+  cyan:        "#44ddff",
+  dim:         "#00ff8833",
+  glow:        "0 0 8px #00ff8844",
+  glowStrong:  "0 0 14px #00ff8866",
 };
+const F = { fontFamily: "'Courier New', Courier, monospace" };
 
-const mono = { fontFamily: "ui-monospace, 'Cascadia Code', monospace" };
-const sys = { fontFamily: "system-ui, -apple-system, sans-serif" };
+// ─── Airtable delete helpers (not in useAirtable.js) ─────
+const BASE_ID = "appsS6oYAVqgJhe7H";
+const TABLE_ID = "tblIyWuFysf5Hxu8u";
+const atHeaders = () => ({ Authorization: `Bearer ${process.env.REACT_APP_AIRTABLE_API_KEY}` });
 
-// ── Cat SVGs ──────────────────────────────────────────────
-// Sleeping loaf cat — 3 paths max
-const LoafCat = ({ size = 36, dotColor = null }) => (
-  <svg width={size} height={size} viewBox="0 0 40 36" fill="none" style={{ display: "block" }}>
-    <ellipse cx="20" cy="24" rx="16" ry="11" fill={c.accent} opacity="0.9" />
-    <polygon points="9,14 7,7 13,13" fill={c.accent} opacity="0.9" />
-    <polygon points="27,13 31,7 33,13" fill={c.accent} opacity="0.9" />
-    <path d="M14,22 Q17,20.5 20,22 Q23,20.5 26,22" stroke={c.bg} strokeWidth="1.6" fill="none" strokeLinecap="round" />
-    {dotColor && <circle cx="36" cy="6" r="4" fill={dotColor} />}
+async function deleteByStatus(statuses, onDone) {
+  const formula = encodeURIComponent(`OR(${statuses.map(s => `{status}="${s}"`).join(",")})`);
+  const res = await fetch(
+    `https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}?filterByFormula=${formula}`,
+    { headers: atHeaders() }
+  );
+  const data = await res.json();
+  const ids = (data.records || []).map(r => r.id);
+  if (ids.length === 0) return;
+  for (let i = 0; i < ids.length; i += 10) {
+    const chunk = ids.slice(i, i + 10);
+    const params = chunk.map(id => `records[]=${id}`).join("&");
+    await fetch(`https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}?${params}`, {
+      method: "DELETE", headers: atHeaders(),
+    });
+  }
+  onDone?.();
+}
+
+// ─── Cat SVGs — simple filled silhouette, no outlines ────
+const LoafCat = ({ color = C.active, size = 40 }) => (
+  <svg width={size} height={Math.round(size * 0.85)} viewBox="0 0 50 43" fill="none">
+    <ellipse cx="25" cy="30" rx="22" ry="13" fill={color} />
+    <ellipse cx="25" cy="22" rx="14" ry="11" fill={color} />
+    <polygon points="13,14 11,6 18,12" fill={color} />
+    <polygon points="37,14 39,6 32,12" fill={color} />
+    <path d="M18,22 Q22,20 26,22 Q30,20 33,22" stroke={C.bg} strokeWidth="1.6" fill="none" strokeLinecap="round" />
   </svg>
 );
 
-// Upright cat — for agents
-const AgentCat = ({ size = 32, color = c.accent, dotColor = null }) => (
-  <svg width={size} height={size} viewBox="0 0 36 40" fill="none" style={{ display: "block" }}>
-    <ellipse cx="18" cy="32" rx="11" ry="7" fill={color} />
-    <circle cx="18" cy="17" r="11" fill={color} />
-    <polygon points="10,9 8,2 14,8" fill={color} />
-    <polygon points="26,9 28,2 22,8" fill={color} />
-    <circle cx="14.5" cy="16" r="2.2" fill={c.bg} />
-    <circle cx="21.5" cy="16" r="2.2" fill={c.bg} />
-    <circle cx="15" cy="15.2" r="0.9" fill="rgba(255,255,255,0.6)" />
-    <circle cx="22" cy="15.2" r="0.9" fill="rgba(255,255,255,0.6)" />
-    {dotColor && <circle cx="32" cy="4" r="4" fill={dotColor} />}
+const ResearchCat = ({ color = "#00aa55", size = 36 }) => (
+  <svg width={size} height={size} viewBox="0 0 44 48" fill="none">
+    <ellipse cx="22" cy="38" rx="13" ry="9" fill={color} />
+    <ellipse cx="22" cy="22" rx="13" ry="14" fill={color} />
+    <polygon points="11,11 9,2 16,10" fill={color} />
+    <polygon points="33,11 35,2 28,10" fill={color} />
+    <circle cx="17" cy="20" r="2.8" fill={C.bg} />
+    <circle cx="27" cy="20" r="2.8" fill={C.bg} />
+    <circle cx="17.8" cy="19.2" r="1.1" fill="rgba(255,255,255,0.5)" />
+    <circle cx="27.8" cy="19.2" r="1.1" fill="rgba(255,255,255,0.5)" />
+    <path d="M34,40 Q42,34 38,45" stroke={color} strokeWidth="3" fill="none" strokeLinecap="round" />
   </svg>
 );
 
-// ── Shared UI atoms ───────────────────────────────────────
-const Badge = ({ label, style: extra = {} }) => (
-  <span style={{
-    ...mono, fontSize: 9, padding: "2px 8px", borderRadius: 4,
-    border: `1px solid ${c.border}`, color: c.muted,
-    letterSpacing: 0.8, textTransform: "uppercase",
-    ...extra,
-  }}>{label}</span>
+const DesignCat = ({ color = "#00aa55", size = 36 }) => (
+  <svg width={size} height={size} viewBox="0 0 46 48" fill="none">
+    <ellipse cx="20" cy="38" rx="12" ry="8" fill={color} />
+    <ellipse cx="22" cy="22" rx="13" ry="13" fill={color} />
+    <polygon points="12,11 10,3 17,10" fill={color} />
+    <polygon points="32,11 34,3 27,10" fill={color} />
+    <circle cx="18" cy="20" r="2.5" fill={C.bg} />
+    <circle cx="27" cy="20" r="2.5" fill={C.bg} />
+    <path d="M36,22 Q44,16 42,28 Q40,34 36,30" stroke={color} strokeWidth="3.5" fill="none" strokeLinecap="round" />
+    <ellipse cx="42" cy="22" rx="4" ry="3" fill={color} />
+  </svg>
+);
+
+const ListingCat = ({ color = "#00aa55", size = 36 }) => (
+  <svg width={size} height={size} viewBox="0 0 42 48" fill="none">
+    <ellipse cx="21" cy="38" rx="13" ry="10" fill={color} />
+    <ellipse cx="21" cy="20" rx="13" ry="13" fill={color} />
+    <polygon points="11,10 9,2 16,9" fill={color} />
+    <polygon points="31,10 33,2 26,9" fill={color} />
+    <path d="M16,20 Q18,18 21,20" stroke={C.bg} strokeWidth="1.8" fill="none" strokeLinecap="round" />
+    <path d="M21,20 Q24,18 27,20" stroke={C.bg} strokeWidth="1.8" fill="none" strokeLinecap="round" />
+    <path d="M30,36 Q38,28 35,42 Q30,46 21,44" stroke={color} strokeWidth="3" fill="none" strokeLinecap="round" />
+  </svg>
+);
+
+const FeedbackCat = ({ color = "#00aa55", size = 36 }) => (
+  <svg width={size} height={size} viewBox="0 0 42 48" fill="none">
+    <ellipse cx="21" cy="36" rx="14" ry="11" fill={color} />
+    <ellipse cx="21" cy="20" rx="13" ry="13" fill={color} />
+    <polygon points="11,10 9,2 16,9" fill={color} />
+    <polygon points="31,10 33,2 26,9" fill={color} />
+    <circle cx="16.5" cy="19" r="3.2" fill={C.bg} />
+    <circle cx="25.5" cy="19" r="3.2" fill={C.bg} />
+    <circle cx="17.3" cy="18" r="1.3" fill="rgba(255,255,255,0.55)" />
+    <circle cx="26.3" cy="18" r="1.3" fill="rgba(255,255,255,0.55)" />
+  </svg>
+);
+
+// ─── Base UI atoms ────────────────────────────────────────
+const GreenBtn = ({ children, onClick, style: ex = {}, disabled }) => (
+  <button onClick={onClick} disabled={disabled} style={{
+    ...F, background: "transparent", color: C.active, border: `1px solid ${C.active}`,
+    borderRadius: 4, padding: "5px 14px", fontSize: 11, cursor: disabled ? "default" : "pointer",
+    letterSpacing: 1, transition: "all 0.15s", opacity: disabled ? 0.4 : 1,
+    ...ex,
+  }}
+    onMouseEnter={e => !disabled && (e.currentTarget.style.boxShadow = C.glow)}
+    onMouseLeave={e => (e.currentTarget.style.boxShadow = "none")}
+  >{children}</button>
+);
+
+const RedBtn = ({ children, onClick, style: ex = {} }) => (
+  <button onClick={onClick} style={{
+    ...F, background: "transparent", color: C.danger, border: `1px solid ${C.danger}44`,
+    borderRadius: 4, padding: "5px 14px", fontSize: 11, cursor: "pointer",
+    letterSpacing: 1, ...ex,
+  }}>{children}</button>
+);
+
+const GhostBtn = ({ children, onClick, style: ex = {} }) => (
+  <button onClick={onClick} style={{
+    ...F, background: "transparent", color: C.muted, border: `1px solid #333`,
+    borderRadius: 4, padding: "5px 14px", fontSize: 11, cursor: "pointer",
+    letterSpacing: 1, ...ex,
+  }}>{children}</button>
+);
+
+const Label = ({ children, style: ex = {} }) => (
+  <div style={{ ...F, fontSize: 9, letterSpacing: 2, textTransform: "uppercase", color: C.muted, marginBottom: 8, ...ex }}>{children}</div>
+);
+
+const EmptyState = ({ text }) => (
+  <div style={{ ...F, fontSize: 11, color: C.muted, textAlign: "center", padding: "32px 0", letterSpacing: 1 }}>{text}</div>
 );
 
 const StatusDot = ({ state }) => {
-  const color = state === "running" ? c.green : state === "waiting" ? c.amber : c.muted;
+  const color = state === "running" ? C.active : state === "waiting" ? C.amber : "#334433";
   return (
     <span style={{
-      display: "inline-block", width: 6, height: 6, borderRadius: "50%",
+      display: "inline-block", width: 7, height: 7, borderRadius: "50%",
       background: color, flexShrink: 0,
-      boxShadow: state === "running" ? `0 0 6px ${c.green}` : "none",
+      animation: state === "running" ? "pulse 1.4s ease-in-out infinite" : "none",
+      boxShadow: state === "running" ? `0 0 6px ${C.active}` : "none",
     }} />
   );
 };
 
-const SectionLabel = ({ children }) => (
-  <div style={{ ...mono, fontSize: 9, letterSpacing: 2, textTransform: "uppercase", color: c.muted, marginBottom: 10 }}>
-    {children}
-  </div>
-);
-
-const EmptyState = ({ text }) => (
-  <div style={{ ...mono, fontSize: 11, color: c.muted, textAlign: "center", padding: "28px 0" }}>{text}</div>
-);
-
-const Btn = ({ onClick, children, variant = "default", style: extra = {}, ...rest }) => {
-  const variants = {
-    default: { background: c.faint, color: c.muted, border: `1px solid ${c.border}` },
-    approve: { background: c.greenDim, color: c.green, border: `1px solid ${c.green}33` },
-    reject: { background: c.redDim, color: c.red, border: `1px solid ${c.red}33` },
-    primary: { background: c.glow, color: c.accent, border: `1px solid ${c.border}` },
+const CategoryBadge = ({ category }) => {
+  const map = {
+    approved: { color: C.active, bg: "#001a0d", border: C.dim },
+    rejected: { color: "#aa3333", bg: C.dangerDim, border: "#330000" },
+    trend:    { color: C.cyan, bg: "#001a22", border: "#003344" },
+    avoid:    { color: C.amber, bg: "#1a1000", border: "#332200" },
+    general:  { color: C.muted, bg: C.faint, border: "#222" },
   };
+  const s = map[category] || map.general;
   return (
-    <button onClick={onClick} style={{
-      ...mono, fontSize: 10, fontWeight: 600, padding: "5px 12px",
-      borderRadius: 8, cursor: "pointer", letterSpacing: 0.4,
-      transition: "all 0.15s",
-      ...variants[variant],
-      ...extra,
-    }} {...rest}>{children}</button>
+    <span style={{ ...F, fontSize: 8, padding: "2px 7px", borderRadius: 3, letterSpacing: 0.8,
+      textTransform: "uppercase", color: s.color, background: s.bg, border: `1px solid ${s.border}`,
+      flexShrink: 0, whiteSpace: "nowrap" }}>{category}</span>
   );
 };
 
-// ── Agent page header ─────────────────────────────────────
-const AgentHeader = ({ name, model, state, catColor = c.accent, subtitle }) => (
-  <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "20px 24px 16px", borderBottom: `1px solid ${c.border}` }}>
-    <div style={{ width: 52, height: 52, borderRadius: 12, background: c.card, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-      <AgentCat size={34} color={catColor} />
-    </div>
-    <div style={{ flex: 1 }}>
-      <div style={{ ...sys, fontSize: 16, fontWeight: 600, color: c.text, marginBottom: 2 }}>{name}</div>
-      <div style={{ ...mono, fontSize: 10, color: c.muted }}>{subtitle || model}</div>
-    </div>
-    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-      <StatusDot state={state} />
-      <span style={{ ...mono, fontSize: 10, color: c.muted, textTransform: "capitalize" }}>{state}</span>
-    </div>
-  </div>
-);
-
-const TerminalLine = ({ text, color = c.muted }) => (
-  <div style={{ padding: "8px 24px", background: "#0d0d0d", borderBottom: `1px solid ${c.border}`, ...mono, fontSize: 10, color }}>
-    <span style={{ color: c.muted, marginRight: 8 }}>$</span>{text}
-  </div>
-);
-
-// ── Sidebar ───────────────────────────────────────────────
+// ─── Sidebar ──────────────────────────────────────────────
 const NAV = [
-  { id: "overview", label: "Overview", sub: "Snow's view" },
-  { id: "research", label: "Research Agent", sub: "Trend scanner" },
-  { id: "design", label: "Design Agent", sub: "Image generator" },
-  { id: "strategy", label: "Strategy Agent", sub: "Coming soon", disabled: true },
-  { id: "listing", label: "Listing Agent", sub: "SEO writer" },
-  { id: "feedback", label: "Feedback Agent", sub: "Performance" },
+  { id: "overview",  label: "OVERVIEW",  sub: "Snow's command center",  Cat: LoafCat },
+  { id: "research",  label: "RESEARCH",  sub: "Etsy trend scanner",     Cat: ResearchCat },
+  { id: "design",    label: "DESIGN",    sub: "Image generator",        Cat: DesignCat },
+  { id: "strategy",  label: "STRATEGY",  sub: "Coming soon",            Cat: ListingCat, disabled: true },
+  { id: "listing",   label: "LISTING",   sub: "SEO & Etsy uploader",    Cat: ListingCat },
+  { id: "feedback",  label: "FEEDBACK",  sub: "Performance tracker",    Cat: FeedbackCat },
 ];
-
-const SECONDARY = [
-  { id: "logs", label: "Pipeline Logs" },
-  { id: "memory", label: "Snow Memory" },
+const NAV2 = [
+  { id: "logs",   label: "PIPELINE LOGS" },
+  { id: "memory", label: "SNOW MEMORY" },
 ];
+const PLACEHOLDERS = ["FUTURE AGENT 01", "FUTURE AGENT 02", "FUTURE AGENT 03"];
 
 function Sidebar({ active, setActive, agentStates, counts }) {
   return (
-    <div style={{
-      width: 220, flexShrink: 0, background: c.card, borderRight: `1px solid ${c.border}`,
-      display: "flex", flexDirection: "column", height: "100vh", position: "sticky", top: 0,
-    }}>
+    <div style={{ width: 260, flexShrink: 0, background: C.bg, borderRight: `1px solid ${C.border}`,
+      display: "flex", flexDirection: "column", height: "100vh", position: "sticky", top: 0, overflowY: "auto" }}>
+
       {/* Logo */}
-      <div style={{ padding: "20px 18px 16px", borderBottom: `1px solid ${c.border}` }}>
-        <div style={{ ...mono, fontSize: 9, color: c.muted, letterSpacing: 2, textTransform: "uppercase", marginBottom: 4 }}>Agent Ops</div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <LoafCat size={28} />
-          <span style={{ ...sys, fontSize: 15, fontWeight: 700, color: c.text, letterSpacing: 0.5 }}>ProjectSnow</span>
+      <div style={{ padding: "18px 16px 14px", borderBottom: `1px solid ${C.border}` }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+          <LoafCat color={C.active} size={30} />
+          <div>
+            <div style={{ ...F, fontSize: 14, fontWeight: 700, color: C.active, letterSpacing: 2 }}>PROJECTSNOW</div>
+            <div style={{ ...F, fontSize: 9, color: C.muted, letterSpacing: 1.5 }}>AGENT OPS v0.1</div>
+          </div>
         </div>
       </div>
 
       {/* Main nav */}
-      <div style={{ padding: "10px 8px", flex: 1 }}>
+      <div style={{ padding: "10px 10px 4px" }}>
         {NAV.map(item => {
           const isActive = active === item.id;
           const state = agentStates[item.id] || "idle";
-          const count = counts[item.id];
+          const count = counts[item.id] || 0;
           return (
-            <button key={item.id}
-              onClick={() => !item.disabled && setActive(item.id)}
-              disabled={item.disabled}
+            <button key={item.id} onClick={() => !item.disabled && setActive(item.id)} disabled={item.disabled}
               style={{
-                width: "100%", textAlign: "left", background: isActive ? c.glow : "transparent",
-                border: isActive ? `1px solid ${c.border}` : "1px solid transparent",
-                borderRadius: 8, padding: "8px 10px", cursor: item.disabled ? "default" : "pointer",
-                marginBottom: 2, display: "flex", alignItems: "center", gap: 9,
-                opacity: item.disabled ? 0.35 : 1, transition: "all 0.12s",
+                width: "100%", display: "flex", alignItems: "center", gap: 10, textAlign: "left",
+                background: isActive ? "#0d150d" : C.card,
+                border: isActive ? `1px solid ${C.active}` : `1px solid ${C.border}`,
+                borderLeft: isActive ? `3px solid ${C.active}` : `3px solid transparent`,
+                borderRadius: 4, padding: "10px 10px", marginBottom: 5, cursor: item.disabled ? "default" : "pointer",
+                opacity: item.disabled ? 0.3 : 1,
+                boxShadow: isActive ? C.glow : "none",
+                minHeight: 64, transition: "all 0.15s",
               }}>
-              <StatusDot state={item.disabled ? "idle" : state} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ ...sys, fontSize: 12, fontWeight: isActive ? 600 : 400, color: isActive ? c.text : c.muted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{item.label}</div>
-                <div style={{ ...mono, fontSize: 9, color: "#333", marginTop: 1 }}>{item.sub}</div>
+              <div style={{ flexShrink: 0 }}>
+                <item.Cat color={isActive ? C.active : "#336644"} size={28} />
               </div>
-              {count > 0 && (
-                <span style={{ ...mono, fontSize: 9, background: c.faint, color: c.muted, borderRadius: 4, padding: "1px 5px", border: `1px solid ${c.border}` }}>{count}</span>
-              )}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ ...F, fontSize: 11, fontWeight: 700, color: isActive ? C.active : C.muted,
+                  letterSpacing: 1.5, marginBottom: 2 }}>{item.label}</div>
+                <div style={{ ...F, fontSize: 9, color: "#334433", letterSpacing: 0.5 }}>{item.sub}</div>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                <StatusDot state={item.disabled ? "idle" : state} />
+                {count > 0 && (
+                  <span style={{ ...F, fontSize: 9, color: C.active, background: "#001a0d",
+                    border: `1px solid ${C.dim}`, borderRadius: 3, padding: "0 5px", lineHeight: "16px" }}>{count}</span>
+                )}
+              </div>
             </button>
           );
         })}
 
-        <div style={{ height: 1, background: c.border, margin: "12px 4px" }} />
+        <div style={{ height: 1, background: C.border, margin: "8px 4px 10px" }} />
 
-        {SECONDARY.map(item => {
+        {NAV2.map(item => {
           const isActive = active === item.id;
           return (
             <button key={item.id} onClick={() => setActive(item.id)} style={{
-              width: "100%", textAlign: "left", background: isActive ? c.glow : "transparent",
-              border: isActive ? `1px solid ${c.border}` : "1px solid transparent",
-              borderRadius: 8, padding: "8px 10px", cursor: "pointer", marginBottom: 2,
-              transition: "all 0.12s",
+              width: "100%", textAlign: "left", background: isActive ? "#0d150d" : C.card,
+              border: isActive ? `1px solid ${C.active}` : `1px solid ${C.border}`,
+              borderLeft: isActive ? `3px solid ${C.active}` : `3px solid transparent`,
+              borderRadius: 4, padding: "9px 12px", marginBottom: 5, cursor: "pointer",
+              boxShadow: isActive ? C.glow : "none", transition: "all 0.15s",
             }}>
-              <span style={{ ...sys, fontSize: 12, fontWeight: isActive ? 600 : 400, color: isActive ? c.text : c.muted }}>{item.label}</span>
+              <span style={{ ...F, fontSize: 11, color: isActive ? C.active : C.muted, letterSpacing: 1.5 }}>{item.label}</span>
             </button>
           );
         })}
+
+        <div style={{ height: 1, background: C.border, margin: "8px 4px 10px" }} />
+
+        {PLACEHOLDERS.map(p => (
+          <div key={p} style={{ background: C.card, border: `1px solid #111`, borderRadius: 4,
+            padding: "10px 12px", marginBottom: 5, minHeight: 50, display: "flex", alignItems: "center" }}>
+            <span style={{ ...F, fontSize: 10, color: "#222", letterSpacing: 1 }}>{p}</span>
+          </div>
+        ))}
       </div>
     </div>
   );
 }
 
-// ── Overview page ─────────────────────────────────────────
-function OverviewPage({ report, pipelineStatus, proposals, designs, listings, memory }) {
-  const steps = ["Research Agent", "Design Agent", "Listing Agent", "Feedback Agent"];
-  const activeAgent = pipelineStatus?.active_agent;
-  const isRunning = pipelineStatus?.running;
-  const activeIdx = steps.indexOf(activeAgent);
+// ─── Page-level agent header ──────────────────────────────
+function AgentPageHeader({ CatComp, catColor = "#00aa55", name, sub, state, rightSlot }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "20px 26px 16px",
+      borderBottom: `1px solid ${C.border}` }}>
+      <div style={{ width: 56, height: 56, borderRadius: 6, background: C.card, border: `1px solid ${C.border}`,
+        display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+        boxShadow: state === "running" ? C.glowStrong : "none" }}>
+        <CatComp color={state === "running" ? C.active : catColor} size={36} />
+      </div>
+      <div style={{ flex: 1 }}>
+        <div style={{ ...F, fontSize: 14, fontWeight: 700, color: C.active, letterSpacing: 2, marginBottom: 2 }}>{name}</div>
+        <div style={{ ...F, fontSize: 10, color: C.muted }}>{sub}</div>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <StatusDot state={state} />
+        <span style={{ ...F, fontSize: 10, color: C.muted, letterSpacing: 1, textTransform: "uppercase" }}>{state}</span>
+      </div>
+      {rightSlot}
+    </div>
+  );
+}
 
-  const approved = proposals.filter(p => p.status === "approved");
+const TermLine = ({ text, color = C.muted }) => (
+  <div style={{ padding: "8px 26px", background: "#050505", borderBottom: `1px solid ${C.border}`,
+    ...F, fontSize: 10, color }}>
+    <span style={{ color: C.active, marginRight: 8 }}>&gt;</span>{text}
+  </div>
+);
+
+// ─── Overview page ────────────────────────────────────────
+function SnowChat() {
+  const [input, setInput] = useState("");
+  const [messages, setMessages] = useState([]);
+  const [sending, setSending] = useState(false);
+  const [confirm, setConfirm] = useState("");
+
+  const send = async () => {
+    const msg = input.trim();
+    if (!msg) return;
+    setSending(true);
+    setInput("");
+    try {
+      await fetch(`http://localhost:8000/telegram?message=${encodeURIComponent(msg)}`);
+      setMessages(prev => [...prev.slice(-4), msg]);
+      setConfirm("Message sent to Snow via Telegram");
+      setTimeout(() => setConfirm(""), 3000);
+    } catch (e) {
+      setConfirm("Failed to send — is the server running?");
+      setTimeout(() => setConfirm(""), 4000);
+    }
+    setSending(false);
+  };
 
   return (
-    <div style={{ padding: "24px 28px", maxWidth: 860 }}>
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, overflow: "hidden" }}>
+      <div style={{ padding: "10px 14px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 8 }}>
+        <LoafCat color={C.active} size={20} />
+        <span style={{ ...F, fontSize: 11, color: C.active, letterSpacing: 2 }}>DIRECT LINE — SNOW</span>
+      </div>
+      {messages.length > 0 && (
+        <div style={{ padding: "10px 14px 0", maxHeight: 120, overflowY: "auto" }}>
+          {messages.map((m, i) => (
+            <div key={i} style={{ ...F, fontSize: 11, color: C.muted, padding: "4px 0",
+              borderBottom: i < messages.length - 1 ? `1px solid ${C.faint}` : "none" }}>
+              <span style={{ color: "#334433", marginRight: 6 }}>&gt;</span>{m}
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{ padding: "10px 14px", display: "flex", gap: 8, alignItems: "center" }}>
+        <input value={input} onChange={e => setInput(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && !sending && send()}
+          placeholder="Message Snow..."
+          style={{ ...F, flex: 1, background: "#080808", border: `1px solid ${C.border}`, borderRadius: 4,
+            padding: "7px 10px", color: C.text, fontSize: 11, outline: "none", caretColor: C.active }} />
+        <GreenBtn onClick={send} disabled={sending} style={{ padding: "7px 18px", fontSize: 11 }}>
+          {sending ? "SENDING..." : "[ SEND ]"}
+        </GreenBtn>
+      </div>
+      {confirm && (
+        <div style={{ padding: "0 14px 10px", ...F, fontSize: 10, color: C.active }}>{confirm}</div>
+      )}
+    </div>
+  );
+}
+
+function OverviewPage({ report, pipelineStatus, proposals, designs, listings, memory }) {
+  const steps = ["INIT", "SNOW", "RESEARCH", "DESIGN", "LISTING", "FEEDBACK"];
+  const agentToStep = { "Snow": 1, "Research Agent": 2, "Design Agent": 3, "Listing Agent": 4, "Feedback Agent": 5 };
+  const activeIdx = pipelineStatus?.running ? (agentToStep[pipelineStatus?.active_agent] ?? 0) : -1;
+
+  const approved = proposals.filter(p => p.status === "approved");
+  const rate = proposals.length ? `${Math.round(approved.length / proposals.length * 100)}%` : "—";
+
+  return (
+    <div style={{ padding: "24px 26px" }}>
 
       {/* Snow identity */}
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 16, marginBottom: 28 }}>
-        <div style={{ width: 60, height: 60, borderRadius: 14, background: c.card, border: `1px solid ${c.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <LoafCat size={42} />
+      <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 24 }}>
+        <div style={{ width: 64, height: 64, borderRadius: 6, background: C.card, border: `1px solid ${C.active}44`,
+          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+          boxShadow: C.glowStrong }}>
+          <LoafCat color={C.active} size={46} />
         </div>
-        <div style={{ paddingTop: 4 }}>
-          <div style={{ ...sys, fontSize: 22, fontWeight: 700, color: c.text, marginBottom: 2 }}>Snow</div>
-          <div style={{ ...mono, fontSize: 11, color: c.muted, marginBottom: 6 }}>Ruthless Market Analyst</div>
-          <Badge label="claude-opus-4.6" style={{ color: c.accent, borderColor: c.border }} />
+        <div>
+          <div style={{ ...F, fontSize: 22, fontWeight: 700, color: C.active, letterSpacing: 3, marginBottom: 3 }}>SNOW</div>
+          <div style={{ ...F, fontSize: 10, color: C.muted, letterSpacing: 2, marginBottom: 6 }}>RUTHLESS MARKET ANALYST</div>
+          <span style={{ ...F, fontSize: 9, color: C.active, background: "#001a0d", border: `1px solid ${C.dim}`,
+            borderRadius: 3, padding: "2px 8px", letterSpacing: 1 }}>claude-opus-4.6</span>
         </div>
       </div>
 
       {/* Pipeline status bar */}
-      <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 12, padding: "14px 18px", marginBottom: 20 }}>
-        <SectionLabel>Pipeline Status</SectionLabel>
-        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-          {steps.map((step, i) => {
-            const isActive = activeIdx === i && isRunning;
-            const isDone = activeIdx > i && isRunning;
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, padding: "14px 16px", marginBottom: 18 }}>
+        <Label>Pipeline Status</Label>
+        <div style={{ display: "grid", gridTemplateColumns: `repeat(${steps.length}, 1fr)`, gap: 6 }}>
+          {steps.map((s, i) => {
+            const isActive = i === activeIdx;
+            const isDone = i < activeIdx && activeIdx >= 0;
             return (
-              <div key={step} style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
-                <div style={{
-                  flex: 1, background: isActive ? c.glow : isDone ? "#1a2a1a" : c.faint,
-                  border: `1px solid ${isActive ? c.accent : isDone ? c.green + "44" : c.border}`,
-                  borderRadius: 8, padding: "7px 10px", transition: "all 0.4s",
-                }}>
-                  <div style={{ ...mono, fontSize: 9, color: isActive ? c.text : isDone ? c.green : c.muted, whiteSpace: "nowrap" }}>
-                    {isActive && <span style={{ marginRight: 5 }}>&#9679;</span>}{step}
-                  </div>
+              <div key={s} style={{
+                background: isActive ? "#001a0d" : isDone ? "#060d06" : "#0a0a0a",
+                border: `1px solid ${isActive ? C.active : isDone ? C.active + "44" : "#1a1a1a"}`,
+                borderRadius: 4, padding: "7px 6px", textAlign: "center",
+                boxShadow: isActive ? C.glow : "none", transition: "all 0.3s",
+              }}>
+                <div style={{ ...F, fontSize: 9, color: isActive ? C.active : isDone ? C.active + "88" : C.muted,
+                  letterSpacing: 1, whiteSpace: "nowrap" }}>
+                  {isActive && <span style={{ marginRight: 4 }}>&#9679;</span>}{s}
                 </div>
-                {i < steps.length - 1 && <span style={{ color: c.border, ...mono, fontSize: 10 }}>›</span>}
               </div>
             );
           })}
-          {!isRunning && (
-            <div style={{ ...mono, fontSize: 9, color: c.muted, marginLeft: 8, whiteSpace: "nowrap" }}>idle</div>
-          )}
         </div>
       </div>
 
-      {/* Quick stats grid */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 20 }}>
+      {/* Stats row */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 18 }}>
         {[
-          { label: "Proposals Reviewed", value: proposals.length },
-          { label: "Approval Rate", value: proposals.length ? `${Math.round(approved.length / proposals.length * 100)}%` : "—" },
-          { label: "Designs Generated", value: designs.length },
-          { label: "Listings Ready", value: listings.length },
-        ].map(stat => (
-          <div key={stat.label} style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 12, padding: "14px 16px" }}>
-            <div style={{ ...mono, fontSize: 20, fontWeight: 700, color: c.text, marginBottom: 4 }}>{stat.value}</div>
-            <div style={{ ...sys, fontSize: 10, color: c.muted }}>{stat.label}</div>
+          { label: "PROPOSALS REVIEWED", value: proposals.length },
+          { label: "APPROVAL RATE", value: rate },
+          { label: "DESIGNS GENERATED", value: designs.length },
+          { label: "LISTINGS READY", value: listings.length },
+        ].map(s => (
+          <div key={s.label} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, padding: "14px 16px" }}>
+            <div style={{ ...F, fontSize: 26, fontWeight: 700, color: C.text, marginBottom: 5 }}>{s.value}</div>
+            <div style={{ ...F, fontSize: 8, color: C.muted, letterSpacing: 1.5 }}>{s.label}</div>
           </div>
         ))}
       </div>
 
-      {/* Snow report card */}
-      <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 12, padding: "16px 18px", marginBottom: 20 }}>
-        <SectionLabel>Last Report</SectionLabel>
+      {/* Snow report */}
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, padding: "14px 16px", marginBottom: 18 }}>
+        <Label>Last Snow Report</Label>
         {report ? (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 14 }}>
             <div>
-              <div style={{ ...sys, fontSize: 10, color: c.muted, marginBottom: 6 }}>Priority Niche</div>
-              <div style={{ ...mono, fontSize: 13, color: c.text, fontWeight: 600 }}>{report.priority_niche || "—"}</div>
+              <div style={{ ...F, fontSize: 9, color: C.muted, letterSpacing: 1, marginBottom: 6 }}>PRIORITY NICHE</div>
+              <div style={{ ...F, fontSize: 14, color: C.active, letterSpacing: 1 }}>{report.priority_niche || "—"}</div>
             </div>
             <div>
-              <div style={{ ...sys, fontSize: 10, color: c.muted, marginBottom: 6 }}>Summary</div>
-              <div style={{ ...sys, fontSize: 11, color: c.muted, lineHeight: 1.6 }}>{report.summary?.slice(0, 200) || "No summary yet."}</div>
+              <div style={{ ...F, fontSize: 9, color: C.muted, letterSpacing: 1, marginBottom: 6 }}>SUMMARY</div>
+              <div style={{ ...F, fontSize: 11, color: C.muted, lineHeight: 1.7 }}>{report.summary?.slice(0, 240) || "—"}</div>
             </div>
           </div>
         ) : (
-          <EmptyState text="No report yet — run the pipeline to generate Snow's first analysis." />
+          <EmptyState text="NO REPORT YET — RUN THE PIPELINE" />
         )}
       </div>
 
       {/* Memory preview */}
-      <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 12, padding: "16px 18px" }}>
-        <SectionLabel>Memory Preview</SectionLabel>
-        {memory.slice(0, 5).length === 0
-          ? <EmptyState text="No memory entries yet." />
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, padding: "14px 16px", marginBottom: 18 }}>
+        <Label>Memory Preview</Label>
+        {memory.length === 0
+          ? <EmptyState text="NO MEMORY ENTRIES YET" />
           : memory.slice(0, 5).map(m => (
-            <div key={m.id} style={{ display: "flex", gap: 10, alignItems: "flex-start", paddingBottom: 10, marginBottom: 10, borderBottom: `1px solid ${c.faint}` }}>
-              <MemoryCategoryBadge category={m.category} />
-              <div style={{ ...sys, fontSize: 11, color: c.muted, flex: 1, lineHeight: 1.5 }}>{m.observation}</div>
-              <div style={{ ...mono, fontSize: 9, color: "#333", whiteSpace: "nowrap" }}>{m.created_at?.slice(0, 10) || ""}</div>
+            <div key={m.id} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "8px 0",
+              borderBottom: `1px solid ${C.faint}` }}>
+              <CategoryBadge category={m.category} />
+              <div style={{ ...F, fontSize: 11, color: C.muted, flex: 1, lineHeight: 1.6 }}>{m.observation}</div>
+              <div style={{ ...F, fontSize: 9, color: "#333", whiteSpace: "nowrap" }}>{m.created_at?.slice(0, 10)}</div>
             </div>
           ))
         }
       </div>
 
+      {/* Snow chat */}
+      <SnowChat />
     </div>
   );
 }
 
-// ── Research page ─────────────────────────────────────────
-function ResearchPage({ proposals, decide, activeAgent }) {
+// ─── Research page ────────────────────────────────────────
+function ResearchPage({ proposals, decide, activeAgent, refresh }) {
+  const state = activeAgent === "Research Agent" ? "running" : proposals.filter(p => p.status === "pending").length > 0 ? "waiting" : "idle";
   const pending = proposals.filter(p => p.status === "pending");
   const decided = proposals.filter(p => p.status !== "pending");
-  const state = activeAgent === "Research Agent" ? "running" : pending.length > 0 ? "waiting" : "idle";
 
   return (
     <div>
-      <AgentHeader name="Research Agent" model="claude-haiku-4.5" state={state} subtitle="Etsy trend scanner · Niche researcher" />
-      <TerminalLine text={`Scanning Etsy trends — ${pending.length} proposal${pending.length !== 1 ? "s" : ""} pending review`} color={state === "running" ? c.green : c.muted} />
-      <div style={{ padding: "20px 24px" }}>
+      <AgentPageHeader CatComp={ResearchCat} name="RESEARCH AGENT" sub="claude-haiku-4.5 — Etsy trend scanner & niche researcher" state={state}
+        rightSlot={
+          <GhostBtn onClick={() => deleteByStatus(["rejected"], refresh)} style={{ fontSize: 10, letterSpacing: 1 }}>
+            [ CLEAR REJECTED ]
+          </GhostBtn>
+        }
+      />
+      <TermLine text={`${pending.length} proposal${pending.length !== 1 ? "s" : ""} pending review`} color={state === "running" ? C.active : C.muted} />
+      <div style={{ padding: "20px 26px" }}>
 
         {pending.length > 0 && (
           <>
-            <SectionLabel>Awaiting Approval ({pending.length})</SectionLabel>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 24 }}>
+            <Label>AWAITING APPROVAL ({pending.length})</Label>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 22 }}>
               {pending.map(pr => (
-                <div key={pr.id} style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 10, padding: "12px 14px" }}>
-                  <div style={{ ...sys, fontSize: 12, fontWeight: 500, color: c.text, marginBottom: 4 }}>{pr.title}</div>
-                  <div style={{ ...mono, fontSize: 10, color: c.muted, marginBottom: 10 }}>{pr.meta}</div>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <Btn variant="approve" onClick={() => decide(pr.id, "approved")} style={{ flex: 1 }}>Approve</Btn>
-                    <Btn variant="reject" onClick={() => decide(pr.id, "rejected")}>Reject</Btn>
+                <div key={pr.id} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, padding: "12px 14px" }}>
+                  <div style={{ ...F, fontSize: 12, color: C.text, marginBottom: 4 }}>{pr.title}</div>
+                  <div style={{ ...F, fontSize: 10, color: C.muted, marginBottom: 10 }}>{pr.meta}</div>
+                  <div style={{ display: "flex", gap: 7 }}>
+                    <GreenBtn onClick={() => decide(pr.id, "approved")} style={{ flex: 1, padding: "6px", fontSize: 11 }}>[ APPROVE ]</GreenBtn>
+                    <RedBtn onClick={() => decide(pr.id, "rejected")} style={{ padding: "6px 18px", fontSize: 11 }}>[ REJECT ]</RedBtn>
                   </div>
                 </div>
               ))}
@@ -340,52 +505,68 @@ function ResearchPage({ proposals, decide, activeAgent }) {
 
         {decided.length > 0 && (
           <>
-            <SectionLabel>Decided</SectionLabel>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <Label>DECIDED</Label>
+            <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
               {decided.map(pr => (
-                <div key={pr.id} style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 10, padding: "10px 14px", opacity: 0.5, display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{ ...mono, fontSize: 9, color: pr.status === "approved" ? c.green : c.red, width: 52 }}>{pr.status === "approved" ? "approved" : "rejected"}</div>
-                  <div style={{ ...sys, fontSize: 12, color: c.muted, flex: 1 }}>{pr.title}</div>
+                <div key={pr.id} style={{ background: C.card, border: `1px solid #111`, borderRadius: 6,
+                  padding: "9px 14px", opacity: 0.5, display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ ...F, fontSize: 9, color: pr.status === "approved" ? C.active : C.danger,
+                    letterSpacing: 1, width: 56 }}>{pr.status === "approved" ? "approved" : "rejected"}</span>
+                  <span style={{ ...F, fontSize: 11, color: C.muted, flex: 1 }}>{pr.title}</span>
                 </div>
               ))}
             </div>
           </>
         )}
 
-        {proposals.length === 0 && <EmptyState text="No proposals — launch the pipeline to scan trends." />}
+        {proposals.length === 0 && <EmptyState text="NO PROPOSALS — LAUNCH THE PIPELINE" />}
       </div>
     </div>
   );
 }
 
-// ── Design page ───────────────────────────────────────────
-function DesignPage({ designs, decideDesign, activeAgent, onSelectDesign }) {
+// ─── Design page ──────────────────────────────────────────
+function DesignPage({ designs, decideDesign, activeAgent, onSelect, refresh }) {
   const state = activeAgent === "Design Agent" ? "running" : designs.length > 0 ? "waiting" : "idle";
-
   return (
     <div>
-      <AgentHeader name="Design Agent" model="flux-schnell · replicate" state={state} catColor="#fbbf24" subtitle="Image generator · Art director" />
-      <TerminalLine text={`${designs.length} design${designs.length !== 1 ? "s" : ""} awaiting review`} color={state === "running" ? c.amber : c.muted} />
-      <div style={{ padding: "20px 24px" }}>
+      <AgentPageHeader CatComp={DesignCat} name="DESIGN AGENT" sub="flux-schnell via Replicate — Image generator" state={state}
+        rightSlot={
+          <GhostBtn onClick={() => deleteByStatus(["design_rejected"], refresh)} style={{ fontSize: 10, letterSpacing: 1 }}>
+            [ CLEAR REJECTED ]
+          </GhostBtn>
+        }
+      />
+      <TermLine text={`${designs.length} design${designs.length !== 1 ? "s" : ""} awaiting review`} color={state === "running" ? C.active : C.muted} />
+      <div style={{ padding: "20px 26px" }}>
         {designs.length === 0
-          ? <EmptyState text="No designs ready — approve proposals to trigger image generation." />
+          ? <EmptyState text="NO DESIGNS READY YET — APPROVE PROPOSALS TO GENERATE" />
           : (
             <>
-              <SectionLabel>Designs Awaiting Review ({designs.length})</SectionLabel>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
+              <Label>DESIGNS AWAITING REVIEW ({designs.length})</Label>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
                 {designs.map(d => (
-                  <div key={d.id} style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 12, overflow: "hidden" }}>
+                  <div key={d.id} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, overflow: "hidden",
+                    transition: "border-color 0.15s, box-shadow 0.15s" }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = C.active; e.currentTarget.style.boxShadow = C.glow; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.boxShadow = "none"; }}>
                     {d.image_url && (
                       <div style={{ position: "relative" }}>
-                        <img src={d.image_url} alt={d.title} style={{ width: "100%", height: 160, objectFit: "cover", display: "block" }} />
-                        <button onClick={() => onSelectDesign(d)} style={{ position: "absolute", top: 7, right: 7, background: "rgba(0,0,0,0.7)", color: c.text, border: `1px solid ${c.border}`, borderRadius: 6, padding: "3px 8px", fontSize: 10, cursor: "pointer", ...mono }}>expand</button>
+                        <img src={d.image_url} alt={d.title} style={{ width: "100%", height: 170, objectFit: "cover", display: "block" }} />
+                        <button onClick={() => onSelect(d)} style={{
+                          position: "absolute", top: 6, right: 6, ...F, fontSize: 9, color: C.text,
+                          background: "rgba(0,0,0,0.75)", border: `1px solid ${C.border}`, borderRadius: 3,
+                          padding: "3px 8px", cursor: "pointer", letterSpacing: 1,
+                        }}>[ EXPAND ]</button>
                       </div>
                     )}
                     <div style={{ padding: "10px 12px" }}>
-                      <div style={{ ...sys, fontSize: 11, color: c.text, marginBottom: 8, lineHeight: 1.4 }}>{d.title?.slice(0, 56)}{d.title?.length > 56 ? "…" : ""}</div>
+                      <div style={{ ...F, fontSize: 10, color: C.text, marginBottom: 8, lineHeight: 1.4 }}>
+                        {d.title?.slice(0, 60)}{d.title?.length > 60 ? "…" : ""}
+                      </div>
                       <div style={{ display: "flex", gap: 5 }}>
-                        <Btn variant="approve" onClick={() => decideDesign(d.id, "design_approved")} style={{ flex: 1, padding: "5px 8px" }}>Approve</Btn>
-                        <Btn variant="reject" onClick={() => decideDesign(d.id, "design_rejected")} style={{ flex: 1, padding: "5px 8px" }}>Redo</Btn>
+                        <GreenBtn onClick={() => decideDesign(d.id, "design_approved")} style={{ flex: 1, padding: "5px 0", fontSize: 10 }}>[ OK ]</GreenBtn>
+                        <RedBtn onClick={() => decideDesign(d.id, "design_rejected")} style={{ flex: 1, padding: "5px 0", fontSize: 10 }}>[ REDO ]</RedBtn>
                       </div>
                     </div>
                   </div>
@@ -399,37 +580,51 @@ function DesignPage({ designs, decideDesign, activeAgent, onSelectDesign }) {
   );
 }
 
-// ── Listing page ──────────────────────────────────────────
-function ListingPage({ listings, activeAgent, onSelectListing }) {
+// ─── Listing page ─────────────────────────────────────────
+function ListingPage({ listings, activeAgent, onSelect, refresh }) {
   const state = activeAgent === "Listing Agent" ? "running" : listings.length > 0 ? "waiting" : "idle";
-
   return (
     <div>
-      <AgentHeader name="Listing Agent" model="claude-haiku-4.5" state={state} catColor={c.green} subtitle="SEO writer · Etsy uploader" />
-      <TerminalLine text={`${listings.length} listing${listings.length !== 1 ? "s" : ""} ready to upload`} color={state === "running" ? c.green : c.muted} />
-      <div style={{ padding: "20px 24px" }}>
+      <AgentPageHeader CatComp={ListingCat} name="LISTING AGENT" sub="claude-haiku-4.5 — SEO writer & Etsy uploader" state={state}
+        rightSlot={
+          <GhostBtn onClick={() => deleteByStatus(["ready_to_upload"], refresh)} style={{ fontSize: 10, letterSpacing: 1 }}>
+            [ CLEAR UPLOADED ]
+          </GhostBtn>
+        }
+      />
+      <TermLine text={`${listings.length} listing${listings.length !== 1 ? "s" : ""} ready to upload`} color={state === "running" ? C.active : C.muted} />
+      <div style={{ padding: "20px 26px" }}>
         {listings.length === 0
-          ? <EmptyState text="No listings ready — approve designs to generate listings." />
+          ? <EmptyState text="NO LISTINGS READY — APPROVE DESIGNS FIRST" />
           : (
             <>
-              <SectionLabel>Ready to Upload ({listings.length})</SectionLabel>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
+              <Label>READY TO UPLOAD ({listings.length})</Label>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))", gap: 12 }}>
                 {listings.map(l => (
-                  <div key={l.id} onClick={() => onSelectListing(l)} style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 12, overflow: "hidden", cursor: "pointer", transition: "border-color 0.15s" }}
-                    onMouseEnter={e => e.currentTarget.style.borderColor = c.glow}
-                    onMouseLeave={e => e.currentTarget.style.borderColor = c.border}>
+                  <div key={l.id} onClick={() => onSelect(l)}
+                    style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, overflow: "hidden",
+                      cursor: "pointer", transition: "border-color 0.15s, box-shadow 0.15s" }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = C.active; e.currentTarget.style.boxShadow = C.glow; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.boxShadow = "none"; }}>
                     {l.image_url && (
                       <div style={{ position: "relative" }}>
                         <img src={l.image_url} alt={l.title} style={{ width: "100%", height: 150, objectFit: "cover", display: "block" }} />
-                        <div style={{ position: "absolute", bottom: 6, left: 10 }}>
-                          <span style={{ ...mono, fontSize: 13, fontWeight: 700, color: c.text, background: "rgba(0,0,0,0.7)", padding: "2px 6px", borderRadius: 4 }}>{l.price}</span>
+                        <div style={{ position: "absolute", bottom: 6, left: 8 }}>
+                          <span style={{ ...F, fontSize: 13, fontWeight: 700, color: C.active, background: "rgba(0,0,0,0.8)",
+                            padding: "2px 7px", borderRadius: 3, letterSpacing: 1 }}>{l.price}</span>
                         </div>
                       </div>
                     )}
                     <div style={{ padding: "10px 12px" }}>
-                      <div style={{ ...sys, fontSize: 11, color: c.text, marginBottom: 5, lineHeight: 1.4 }}>{l.title?.slice(0, 54)}{l.title?.length > 54 ? "…" : ""}</div>
-                      <div style={{ ...mono, fontSize: 9, color: c.muted, marginBottom: 8 }}>{l.tags?.split(",").length || 0} tags · click to preview</div>
-                      <Btn onClick={e => e.stopPropagation()} variant="primary" style={{ width: "100%", textAlign: "center" }}>Upload to Etsy</Btn>
+                      <div style={{ ...F, fontSize: 10, color: C.text, marginBottom: 5, lineHeight: 1.4 }}>
+                        {l.title?.slice(0, 56)}{l.title?.length > 56 ? "…" : ""}
+                      </div>
+                      <div style={{ ...F, fontSize: 9, color: C.muted, marginBottom: 8 }}>
+                        {l.tags?.split(",").length || 0} tags
+                      </div>
+                      <GreenBtn onClick={e => e.stopPropagation()} style={{ width: "100%", padding: "6px 0", fontSize: 10, letterSpacing: 1 }}>
+                        [ UPLOAD TO ETSY ]
+                      </GreenBtn>
                     </div>
                   </div>
                 ))}
@@ -442,133 +637,142 @@ function ListingPage({ listings, activeAgent, onSelectListing }) {
   );
 }
 
-// ── Feedback page ─────────────────────────────────────────
+// ─── Strategy page ────────────────────────────────────────
+function StrategyPage() {
+  return (
+    <div style={{ padding: "24px 26px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "60vh" }}>
+      <div style={{ opacity: 0.2, marginBottom: 20 }}><ListingCat color={C.active} size={60} /></div>
+      <div style={{ ...F, fontSize: 18, color: C.muted, letterSpacing: 4, marginBottom: 10 }}>COMING SOON</div>
+      <div style={{ ...F, fontSize: 11, color: "#334433", letterSpacing: 1, textAlign: "center", maxWidth: 320, lineHeight: 1.8 }}>
+        The Strategy Agent will analyze market trends and competitor data to suggest long-term positioning, seasonal opportunities, and pricing strategies.
+      </div>
+    </div>
+  );
+}
+
+// ─── Feedback page ────────────────────────────────────────
 function FeedbackPage() {
   return (
     <div>
-      <AgentHeader name="Feedback Agent" model="claude-haiku-4.5" state="idle" catColor="#a78bfa" subtitle="Performance tracker · Weekly recap" />
-      <TerminalLine text="Awaiting listing data — no active tracking" />
-      <div style={{ padding: "20px 24px" }}>
-        <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 12, padding: "14px 16px", marginBottom: 14 }}>
-          <div style={{ ...mono, fontSize: 10, color: c.muted }}>Next recap in <span style={{ color: c.text }}>6 days</span></div>
-          <div style={{ ...mono, fontSize: 10, color: c.muted, marginTop: 4 }}>0 listings tracked</div>
+      <AgentPageHeader CatComp={FeedbackCat} name="FEEDBACK AGENT" sub="claude-haiku-4.5 — Performance tracker & weekly recap" state="idle" />
+      <TermLine text="No active tracking — 0 listings monitored" />
+      <div style={{ padding: "20px 26px" }}>
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, padding: "12px 16px", marginBottom: 14 }}>
+          <div style={{ ...F, fontSize: 10, color: C.muted }}>
+            Next recap in <span style={{ color: C.text }}>6 days</span>
+            <span style={{ color: C.faint, marginLeft: 16 }}>// 0 listings tracked</span>
+          </div>
         </div>
-        <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 12, padding: "60px 24px", textAlign: "center" }}>
-          <div style={{ ...sys, fontSize: 12, color: c.muted }}>Performance charts coming soon</div>
-          <div style={{ ...mono, fontSize: 10, color: "#333", marginTop: 6 }}>Requires active Etsy listings</div>
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6,
+          padding: "60px 24px", textAlign: "center" }}>
+          <div style={{ ...F, fontSize: 14, color: "#334433", letterSpacing: 3 }}>NO DATA YET</div>
+          <div style={{ ...F, fontSize: 10, color: "#222", marginTop: 8, letterSpacing: 1 }}>Requires active Etsy listings to populate charts</div>
         </div>
       </div>
     </div>
   );
 }
 
-// ── Pipeline Logs page ────────────────────────────────────
+// ─── Pipeline Logs page ───────────────────────────────────
 function LogsPage({ logs }) {
-  const statusStyle = (s) => {
-    if (s === "success") return { color: c.green, background: c.greenDim, border: `1px solid ${c.green}33` };
-    if (s === "failed") return { color: c.red, background: c.redDim, border: `1px solid ${c.red}33` };
-    return { color: c.amber, background: c.amberDim, border: `1px solid ${c.amber}33` };
+  const statusColor = (s) => {
+    if (s === "success") return { color: C.active, bg: "#001a0d", border: C.dim };
+    if (s === "failed")  return { color: C.danger, bg: C.dangerDim, border: "#330000" };
+    return { color: C.amber, bg: "#1a1000", border: "#332200" };
   };
 
   return (
-    <div style={{ padding: "24px 28px" }}>
-      <div style={{ ...sys, fontSize: 16, fontWeight: 600, color: c.text, marginBottom: 6 }}>Pipeline Logs</div>
-      <div style={{ ...mono, fontSize: 10, color: c.muted, marginBottom: 20 }}>All pipeline runs, newest first</div>
+    <div style={{ padding: "24px 26px" }}>
+      <div style={{ ...F, fontSize: 14, color: C.active, letterSpacing: 2, marginBottom: 4 }}>PIPELINE LOGS</div>
+      <div style={{ ...F, fontSize: 10, color: C.muted, marginBottom: 20 }}>All runs — newest first</div>
 
-      {logs.length === 0
-        ? <EmptyState text="No pipeline runs recorded yet." />
-        : (
-          <div style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 12, overflow: "hidden" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1.8fr 1fr 0.8fr 0.8fr 0.8fr 0.8fr", gap: 0, padding: "8px 16px", borderBottom: `1px solid ${c.border}` }}>
-              {["Date", "Duration", "Proposals", "Designs", "Listings", "Status"].map(h => (
-                <div key={h} style={{ ...mono, fontSize: 9, color: c.muted, letterSpacing: 1, textTransform: "uppercase" }}>{h}</div>
-              ))}
-            </div>
-            {logs.map((log, i) => (
-              <div key={log.id} style={{ display: "grid", gridTemplateColumns: "1.8fr 1fr 0.8fr 0.8fr 0.8fr 0.8fr", gap: 0, padding: "10px 16px", borderBottom: i < logs.length - 1 ? `1px solid ${c.faint}` : "none", alignItems: "center" }}>
-                <div style={{ ...mono, fontSize: 11, color: c.text }}>{log.date}</div>
-                <div style={{ ...mono, fontSize: 11, color: c.muted }}>{log.duration || "—"}</div>
-                <div style={{ ...mono, fontSize: 11, color: c.muted }}>{log.proposals}</div>
-                <div style={{ ...mono, fontSize: 11, color: c.muted }}>{log.designs}</div>
-                <div style={{ ...mono, fontSize: 11, color: c.muted }}>{log.listings}</div>
-                <span style={{ ...mono, fontSize: 9, padding: "2px 8px", borderRadius: 4, letterSpacing: 0.5, textTransform: "uppercase", display: "inline-block", width: "fit-content", ...statusStyle(log.status) }}>{log.status}</span>
-              </div>
+      {logs.length === 0 ? <EmptyState text="NO RUNS RECORDED YET" /> : (
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, overflow: "hidden" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 0.7fr 0.7fr 0.7fr 0.9fr",
+            padding: "8px 16px", borderBottom: `1px solid ${C.border}` }}>
+            {["DATE", "DURATION", "PROPS", "DESIGNS", "LISTINGS", "STATUS"].map(h => (
+              <div key={h} style={{ ...F, fontSize: 8, color: C.muted, letterSpacing: 1.5 }}>{h}</div>
             ))}
           </div>
-        )
-      }
+          {logs.map((log, i) => {
+            const s = statusColor(log.status);
+            return (
+              <div key={log.id} style={{ display: "grid", gridTemplateColumns: "2fr 1fr 0.7fr 0.7fr 0.7fr 0.9fr",
+                padding: "10px 16px", borderBottom: i < logs.length - 1 ? `1px solid ${C.faint}` : "none",
+                alignItems: "center" }}>
+                <div style={{ ...F, fontSize: 11, color: C.text }}>{log.date}</div>
+                <div style={{ ...F, fontSize: 11, color: C.muted }}>{log.duration || "—"}</div>
+                <div style={{ ...F, fontSize: 11, color: C.muted }}>{log.proposals}</div>
+                <div style={{ ...F, fontSize: 11, color: C.muted }}>{log.designs}</div>
+                <div style={{ ...F, fontSize: 11, color: C.muted }}>{log.listings}</div>
+                <span style={{ ...F, fontSize: 8, padding: "2px 7px", borderRadius: 3, letterSpacing: 1,
+                  textTransform: "uppercase", display: "inline-block", color: s.color,
+                  background: s.bg, border: `1px solid ${s.border}` }}>{log.status}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
 
-// ── Memory category badge ─────────────────────────────────
-function MemoryCategoryBadge({ category }) {
-  const styles = {
-    approved: { color: c.text, background: "#1a1a1a", border: `1px solid ${c.border}` },
-    rejected: { color: c.muted, background: "#151515", border: `1px solid ${c.faint}` },
-    trend: { color: "#888", background: "#141414", border: `1px solid ${c.faint}` },
-    avoid: { color: "#c84040", background: "#150a0a", border: "1px solid #2a1010" },
-    general: { color: c.muted, background: c.faint, border: `1px solid ${c.border}` },
-  };
-  const s = styles[category] || styles.general;
-  return (
-    <span style={{ ...mono, fontSize: 8, padding: "2px 7px", borderRadius: 4, letterSpacing: 0.5, textTransform: "uppercase", flexShrink: 0, ...s }}>{category}</span>
-  );
-}
-
-// ── Snow Memory page ──────────────────────────────────────
+// ─── Snow Memory page ─────────────────────────────────────
 function MemoryPage({ memory }) {
   const [filter, setFilter] = useState("all");
-  const categories = ["all", ...Array.from(new Set(memory.map(m => m.category)))];
+  const cats = ["all", ...Array.from(new Set(memory.map(m => m.category)))];
   const shown = filter === "all" ? memory : memory.filter(m => m.category === filter);
 
   return (
-    <div style={{ padding: "24px 28px" }}>
-      <div style={{ ...sys, fontSize: 16, fontWeight: 600, color: c.text, marginBottom: 6 }}>Snow Memory</div>
-      <div style={{ ...mono, fontSize: 10, color: c.muted, marginBottom: 20 }}>Observations and decisions stored across pipeline runs</div>
+    <div style={{ padding: "24px 26px" }}>
+      <div style={{ ...F, fontSize: 14, color: C.active, letterSpacing: 2, marginBottom: 4 }}>SNOW MEMORY</div>
+      <div style={{ ...F, fontSize: 10, color: C.muted, marginBottom: 20 }}>Observations stored across all pipeline runs</div>
 
-      <div style={{ display: "flex", gap: 6, marginBottom: 18, flexWrap: "wrap" }}>
-        {categories.map(cat => (
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 18 }}>
+        {cats.map(cat => (
           <button key={cat} onClick={() => setFilter(cat)} style={{
-            ...mono, fontSize: 9, padding: "4px 10px", borderRadius: 6, cursor: "pointer",
-            background: filter === cat ? c.glow : c.faint,
-            color: filter === cat ? c.text : c.muted,
-            border: `1px solid ${filter === cat ? c.border : c.faint}`,
-            textTransform: "uppercase", letterSpacing: 0.6,
+            ...F, fontSize: 9, padding: "4px 12px", borderRadius: 4, cursor: "pointer",
+            letterSpacing: 1, textTransform: "uppercase",
+            background: filter === cat ? "#001a0d" : C.card,
+            color: filter === cat ? C.active : C.muted,
+            border: `1px solid ${filter === cat ? C.active : C.border}`,
+            boxShadow: filter === cat ? C.glow : "none",
           }}>{cat}</button>
         ))}
       </div>
 
-      {shown.length === 0
-        ? <EmptyState text="No memory entries." />
-        : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {shown.map(m => (
-              <div key={m.id} style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 10, padding: "12px 14px", display: "flex", gap: 12, alignItems: "flex-start" }}>
-                <MemoryCategoryBadge category={m.category} />
-                <div style={{ ...sys, fontSize: 12, color: c.muted, flex: 1, lineHeight: 1.6 }}>{m.observation}</div>
-                <div style={{ ...mono, fontSize: 9, color: "#333", whiteSpace: "nowrap" }}>{m.created_at?.slice(0, 10) || ""}</div>
-              </div>
-            ))}
-          </div>
-        )
-      }
+      {shown.length === 0 ? <EmptyState text="NO ENTRIES" /> : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {shown.map(m => (
+            <div key={m.id} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6,
+              padding: "11px 14px", display: "flex", gap: 12, alignItems: "flex-start" }}>
+              <CategoryBadge category={m.category} />
+              <div style={{ ...F, fontSize: 11, color: C.muted, flex: 1, lineHeight: 1.6 }}>{m.observation}</div>
+              <div style={{ ...F, fontSize: 9, color: "#333", whiteSpace: "nowrap" }}>{m.created_at?.slice(0, 10) || ""}</div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-// ── Design modal ──────────────────────────────────────────
+// ─── Modals ───────────────────────────────────────────────
 function DesignModal({ design, onClose, decideDesign }) {
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, cursor: "pointer" }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 14, overflow: "hidden", maxWidth: 540, width: "92%", cursor: "default" }}>
-        <img src={design.image_url} alt={design.title} style={{ width: "100%", maxHeight: 460, objectFit: "contain", background: "#0d0d0d", display: "block" }} />
-        <div style={{ padding: "14px 16px", borderTop: `1px solid ${c.border}` }}>
-          <div style={{ ...sys, fontSize: 13, fontWeight: 600, color: c.text, marginBottom: 12 }}>{design.title}</div>
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.94)",
+      display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, cursor: "pointer" }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: C.card, border: `1px solid ${C.active}`,
+        borderRadius: 6, overflow: "hidden", maxWidth: 560, width: "92%", cursor: "default",
+        boxShadow: C.glowStrong }}>
+        <img src={design.image_url} alt={design.title}
+          style={{ width: "100%", maxHeight: 480, objectFit: "contain", background: "#050505", display: "block" }} />
+        <div style={{ padding: "14px 16px", borderTop: `1px solid ${C.border}` }}>
+          <div style={{ ...F, fontSize: 12, color: C.text, marginBottom: 12 }}>{design.title}</div>
           <div style={{ display: "flex", gap: 8 }}>
-            <Btn variant="approve" onClick={() => { decideDesign(design.id, "design_approved"); onClose(); }} style={{ flex: 1, padding: "7px" }}>Approve</Btn>
-            <Btn variant="reject" onClick={() => { decideDesign(design.id, "design_rejected"); onClose(); }} style={{ flex: 1, padding: "7px" }}>Redo</Btn>
-            <Btn onClick={onClose} style={{ padding: "7px 14px" }}>Close</Btn>
+            <GreenBtn onClick={() => { decideDesign(design.id, "design_approved"); onClose(); }} style={{ flex: 1, padding: "8px", fontSize: 11 }}>[ OK ]</GreenBtn>
+            <RedBtn onClick={() => { decideDesign(design.id, "design_rejected"); onClose(); }} style={{ flex: 1, padding: "8px", fontSize: 11 }}>[ REDO ]</RedBtn>
+            <GhostBtn onClick={onClose} style={{ padding: "8px 16px", fontSize: 11 }}>[ CLOSE ]</GhostBtn>
           </div>
         </div>
       </div>
@@ -576,32 +780,49 @@ function DesignModal({ design, onClose, decideDesign }) {
   );
 }
 
-// ── Listing modal ─────────────────────────────────────────
 function ListingModal({ listing, onClose }) {
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, cursor: "pointer" }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 14, overflow: "hidden", maxWidth: 620, width: "92%", cursor: "default", display: "grid", gridTemplateColumns: "1fr 1fr" }}>
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.94)",
+      display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, cursor: "pointer" }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: C.card, border: `1px solid ${C.active}`,
+        borderRadius: 6, overflow: "hidden", maxWidth: 640, width: "92%", cursor: "default",
+        display: "grid", gridTemplateColumns: "1fr 1fr", boxShadow: C.glowStrong }}>
         {listing.image_url && (
-          <img src={listing.image_url} alt={listing.title} style={{ width: "100%", height: "100%", minHeight: 300, objectFit: "cover", display: "block" }} />
+          <img src={listing.image_url} alt={listing.title}
+            style={{ width: "100%", height: "100%", minHeight: 320, objectFit: "cover", display: "block" }} />
         )}
-        <div style={{ padding: "20px 18px", overflowY: "auto", maxHeight: 460 }}>
-          <div style={{ ...sys, fontSize: 13, fontWeight: 600, color: c.text, marginBottom: 6, lineHeight: 1.4 }}>{listing.title}</div>
-          <div style={{ ...mono, fontSize: 16, color: c.text, fontWeight: 700, marginBottom: 14 }}>{listing.price}</div>
-          <div style={{ ...sys, fontSize: 10, color: c.muted, marginBottom: 4 }}>Description</div>
-          <div style={{ ...sys, fontSize: 11, color: c.muted, lineHeight: 1.7, marginBottom: 12 }}>{listing.description?.slice(0, 300)}{listing.description?.length > 300 ? "…" : ""}</div>
-          <div style={{ ...sys, fontSize: 10, color: c.muted, marginBottom: 4 }}>Tags</div>
-          <div style={{ ...mono, fontSize: 9, color: "#444", lineHeight: 1.9, marginBottom: 16 }}>{listing.tags}</div>
-          <Btn variant="primary" style={{ width: "100%", textAlign: "center", padding: "8px", marginBottom: 6 }}>Upload to Etsy</Btn>
-          <Btn onClick={onClose} style={{ width: "100%", textAlign: "center", padding: "7px" }}>Close</Btn>
+        <div style={{ padding: "20px 18px", overflowY: "auto", maxHeight: 480 }}>
+          <div style={{ ...F, fontSize: 13, color: C.text, marginBottom: 6, lineHeight: 1.4 }}>{listing.title}</div>
+          <div style={{ ...F, fontSize: 18, fontWeight: 700, color: C.active, marginBottom: 14, letterSpacing: 1 }}>{listing.price}</div>
+          <div style={{ ...F, fontSize: 9, color: C.muted, letterSpacing: 1, marginBottom: 4 }}>DESCRIPTION</div>
+          <div style={{ ...F, fontSize: 10, color: C.muted, lineHeight: 1.7, marginBottom: 12 }}>
+            {listing.description?.slice(0, 300)}{listing.description?.length > 300 ? "…" : ""}
+          </div>
+          <div style={{ ...F, fontSize: 9, color: C.muted, letterSpacing: 1, marginBottom: 4 }}>TAGS</div>
+          <div style={{ ...F, fontSize: 9, color: "#334433", lineHeight: 2, marginBottom: 16 }}>{listing.tags}</div>
+          <GreenBtn style={{ width: "100%", padding: "9px 0", fontSize: 11, marginBottom: 6, letterSpacing: 1 }}>[ UPLOAD TO ETSY ]</GreenBtn>
+          <GhostBtn onClick={onClose} style={{ width: "100%", padding: "8px 0", fontSize: 11, letterSpacing: 1 }}>[ CLOSE ]</GhostBtn>
         </div>
       </div>
     </div>
   );
 }
 
-// ── Root ──────────────────────────────────────────────────
+// ─── Page title map ───────────────────────────────────────
+const PAGE_TITLES = {
+  overview: "OVERVIEW",
+  research: "RESEARCH AGENT",
+  design:   "DESIGN AGENT",
+  strategy: "STRATEGY AGENT",
+  listing:  "LISTING AGENT",
+  feedback: "FEEDBACK AGENT",
+  logs:     "PIPELINE LOGS",
+  memory:   "SNOW MEMORY",
+};
+
+// ─── Root ─────────────────────────────────────────────────
 export default function Dashboard() {
-  const { proposals, decide, clearCompleted } = useProposals();
+  const { proposals, decide } = useProposals();
   const { designs, decideDesign } = useDesigns();
   const { listings } = useReadyListings();
   const { report } = useSnowReport();
@@ -611,33 +832,27 @@ export default function Dashboard() {
 
   const [activePage, setActivePage] = useState("overview");
   const [keywords, setKeywords] = useState("");
-  const [launchState, setLaunchState] = useState("idle"); // idle | launching | done
+  const [launchState, setLaunchState] = useState("idle");
   const [selectedDesign, setSelectedDesign] = useState(null);
   const [selectedListing, setSelectedListing] = useState(null);
 
   const activeAgent = pipelineStatus?.active_agent;
   const isRunning = pipelineStatus?.running;
 
-  const agentPageState = (agentName) => {
-    if (activeAgent === agentName && isRunning) return "running";
-    return "idle";
-  };
-
-  const agentStates = {
-    overview: isRunning ? "running" : "idle",
-    research: agentPageState("Research Agent"),
-    design: agentPageState("Design Agent"),
-    listing: agentPageState("Listing Agent"),
-    feedback: agentPageState("Feedback Agent"),
-    strategy: "idle",
-    logs: "idle",
-    memory: "idle",
-  };
+  const agentNameToPage = { "Research Agent": "research", "Design Agent": "design", "Listing Agent": "listing", "Feedback Agent": "feedback" };
+  const agentStates = Object.fromEntries(
+    Object.keys(PAGE_TITLES).map(id => {
+      const agentName = Object.keys(agentNameToPage).find(k => agentNameToPage[k] === id);
+      const running = agentName && activeAgent === agentName && isRunning;
+      return [id, running ? "running" : "idle"];
+    })
+  );
+  if (isRunning) agentStates.overview = "running";
 
   const counts = {
     research: proposals.filter(p => p.status === "pending").length,
-    design: designs.length,
-    listing: listings.length,
+    design:   designs.length,
+    listing:  listings.length,
   };
 
   const launch = async () => {
@@ -649,103 +864,95 @@ export default function Dashboard() {
     setTimeout(() => setLaunchState("idle"), 3500);
   };
 
-  const totalStats = [
-    { label: "Listings", value: listings.length },
-    { label: "Views", value: 0 },
-    { label: "Sales", value: 0 },
-  ];
+  const noop = () => {};
 
   return (
-    <div style={{ display: "flex", height: "100vh", background: c.bg, color: c.text, overflow: "hidden" }}>
+    <div style={{ display: "flex", height: "100vh", background: C.bg, color: C.text, overflow: "hidden" }}>
 
       <Sidebar active={activePage} setActive={setActivePage} agentStates={agentStates} counts={counts} />
 
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
-        {/* Top header bar */}
-        <div style={{ height: 52, borderBottom: `1px solid ${c.border}`, display: "flex", alignItems: "center", gap: 12, padding: "0 20px", flexShrink: 0, background: c.card }}>
-          <div style={{ ...sys, fontSize: 13, fontWeight: 700, color: c.text, letterSpacing: 0.3, marginRight: 4 }}>ProjectSnow</div>
-          <div style={{ width: 1, height: 18, background: c.border }} />
-
-          {/* Launch input */}
-          <input
-            value={keywords}
-            onChange={e => setKeywords(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && launchState === "idle" && launch()}
-            placeholder="Keywords for Snow..."
-            style={{ ...mono, background: "transparent", border: `1px solid ${c.border}`, borderRadius: 6, padding: "5px 10px", color: c.text, fontSize: 10, width: 220, outline: "none", caretColor: c.text }}
+        {/* Header */}
+        <div style={{ height: 48, borderBottom: `1px solid ${C.border}`, display: "flex",
+          alignItems: "center", gap: 14, padding: "0 20px", flexShrink: 0, background: C.bg }}>
+          <span style={{ ...F, fontSize: 12, color: C.active, letterSpacing: 2, minWidth: 160 }}>
+            {PAGE_TITLES[activePage] || "OVERVIEW"}
+          </span>
+          <div style={{ width: 1, height: 18, background: C.border }} />
+          <input value={keywords} onChange={e => setKeywords(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && !isRunning && launchState === "idle" && launch()}
+            placeholder="keywords for snow..."
+            style={{ ...F, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4,
+              padding: "5px 10px", color: C.text, fontSize: 10, width: 200, outline: "none",
+              caretColor: C.active }}
+            onFocus={e => e.target.style.borderColor = C.active}
+            onBlur={e => e.target.style.borderColor = C.border}
           />
-          <button onClick={launch} disabled={launchState !== "idle"} style={{
-            ...mono, fontSize: 10, fontWeight: 600, padding: "5px 14px", borderRadius: 6, cursor: launchState === "idle" ? "pointer" : "default",
-            background: launchState === "done" ? c.greenDim : c.faint,
-            color: launchState === "done" ? c.green : launchState === "launching" ? c.muted : c.text,
-            border: `1px solid ${launchState === "done" ? c.green + "44" : c.border}`,
-            transition: "all 0.2s",
-          }}>
-            {launchState === "launching" ? "Launching..." : launchState === "done" ? "Launched" : "Launch Pipeline"}
-          </button>
-
+          {isRunning ? (
+            <GhostBtn style={{ ...F, fontSize: 11, letterSpacing: 1, animation: "pulse 1.4s ease-in-out infinite",
+              borderColor: C.active + "44", color: C.muted }}>
+              [ GO NAP ]
+            </GhostBtn>
+          ) : (
+            <GreenBtn onClick={launch} disabled={launchState !== "idle"} style={{ fontSize: 11, letterSpacing: 1 }}>
+              {launchState === "launching" ? "LAUNCHING..." : launchState === "done" ? "LAUNCHED" : "[ GO WORK ]"}
+            </GreenBtn>
+          )}
           {isRunning && (
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <StatusDot state="running" />
-              <span style={{ ...mono, fontSize: 10, color: c.muted }}>{activeAgent}</span>
+              <span style={{ ...F, fontSize: 9, color: C.muted, letterSpacing: 1 }}>{activeAgent}</span>
             </div>
           )}
-
-          <Btn onClick={clearCompleted} style={{ marginLeft: 4, padding: "4px 10px", color: "#c84040", borderColor: "#2a1010" }}>Clear</Btn>
-
           <div style={{ flex: 1 }} />
-
-          {totalStats.map(s => (
-            <div key={s.label} style={{ textAlign: "right", paddingLeft: 16, borderLeft: `1px solid ${c.border}` }}>
-              <div style={{ ...mono, fontSize: 16, fontWeight: 700, color: c.text, lineHeight: 1 }}>{s.value}</div>
-              <div style={{ ...sys, fontSize: 9, color: c.muted, marginTop: 2, letterSpacing: 0.5 }}>{s.label}</div>
+          {[["Listings", listings.length], ["Views", 0], ["Sales", 0]].map(([label, val]) => (
+            <div key={label} style={{ textAlign: "right", paddingLeft: 16, borderLeft: `1px solid ${C.border}` }}>
+              <div style={{ ...F, fontSize: 15, fontWeight: 700, color: C.text, lineHeight: 1 }}>{val}</div>
+              <div style={{ ...F, fontSize: 8, color: C.muted, marginTop: 2, letterSpacing: 1 }}>{label.toUpperCase()}</div>
             </div>
           ))}
         </div>
 
         {/* Page content */}
         <div style={{ flex: 1, overflowY: "auto" }}>
-          {activePage === "overview" && (
-            <OverviewPage report={report} pipelineStatus={pipelineStatus} proposals={proposals} designs={designs} listings={listings} memory={memory} />
-          )}
-          {activePage === "research" && (
-            <ResearchPage proposals={proposals} decide={decide} activeAgent={activeAgent} />
-          )}
-          {activePage === "design" && (
-            <DesignPage designs={designs} decideDesign={decideDesign} activeAgent={activeAgent} onSelectDesign={setSelectedDesign} />
-          )}
-          {activePage === "listing" && (
-            <ListingPage listings={listings} activeAgent={activeAgent} onSelectListing={setSelectedListing} />
-          )}
-          {activePage === "feedback" && <FeedbackPage />}
-          {activePage === "logs" && <LogsPage logs={logs} />}
-          {activePage === "memory" && <MemoryPage memory={memory} />}
-          {activePage === "strategy" && (
-            <div style={{ padding: "24px 28px" }}>
-              <div style={{ ...sys, fontSize: 16, fontWeight: 600, color: c.text, marginBottom: 6 }}>Strategy Agent</div>
-              <div style={{ ...mono, fontSize: 10, color: c.muted }}>Coming soon</div>
-            </div>
-          )}
+          {activePage === "overview"  && <OverviewPage report={report} pipelineStatus={pipelineStatus} proposals={proposals} designs={designs} listings={listings} memory={memory} />}
+          {activePage === "research"  && <ResearchPage proposals={proposals} decide={decide} activeAgent={activeAgent} refresh={noop} />}
+          {activePage === "design"    && <DesignPage designs={designs} decideDesign={decideDesign} activeAgent={activeAgent} onSelect={setSelectedDesign} refresh={noop} />}
+          {activePage === "strategy"  && <StrategyPage />}
+          {activePage === "listing"   && <ListingPage listings={listings} activeAgent={activeAgent} onSelect={setSelectedListing} refresh={noop} />}
+          {activePage === "feedback"  && <FeedbackPage />}
+          {activePage === "logs"      && <LogsPage logs={logs} />}
+          {activePage === "memory"    && <MemoryPage memory={memory} />}
         </div>
       </div>
 
-      {selectedDesign && (
-        <DesignModal design={selectedDesign} onClose={() => setSelectedDesign(null)} decideDesign={decideDesign} />
-      )}
-      {selectedListing && (
-        <ListingModal listing={selectedListing} onClose={() => setSelectedListing(null)} />
-      )}
+      {selectedDesign  && <DesignModal  design={selectedDesign}  onClose={() => setSelectedDesign(null)}  decideDesign={decideDesign} />}
+      {selectedListing && <ListingModal listing={selectedListing} onClose={() => setSelectedListing(null)} />}
 
       <style>{`
         * { box-sizing: border-box; }
-        body { margin: 0; background: #0a0a0a; }
+        body { margin: 0; background: ${C.bg}; }
+        body::before {
+          content: '';
+          position: fixed;
+          inset: 0;
+          pointer-events: none;
+          z-index: 9999;
+          background: repeating-linear-gradient(
+            0deg,
+            transparent,
+            transparent 3px,
+            rgba(0,255,136,0.012) 3px,
+            rgba(0,255,136,0.012) 4px
+          );
+        }
         ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #1a1a1a; border-radius: 4px; }
-        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        ::-webkit-scrollbar-thumb { background: #1a1a1a; border-radius: 2px; }
+        input::placeholder { color: #334433; }
         button:focus { outline: none; }
-        input::placeholder { color: #333; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
       `}</style>
     </div>
   );
