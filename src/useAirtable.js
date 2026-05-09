@@ -249,5 +249,5 @@ export function useSnowChat() {
     return () => clearInterval(t);
   }, []);
 
-  return { messages };
+  return { messages, refresh: fetch_ };
 }

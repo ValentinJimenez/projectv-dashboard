@@ -429,7 +429,7 @@ const fmtTime = (ts) => {
 function SnowChat() {
   const [input, setInput]     = useState("");
   const [sending, setSending] = useState(false);
-  const { messages }          = useSnowChat();
+  const { messages, refresh } = useSnowChat();
   const scrollRef             = useRef(null);
   const prevCountRef          = useRef(0);
 
@@ -453,6 +453,8 @@ function SnowChat() {
     setInput("");
     try {
       await fetch(`${API}/telegram?message=${encodeURIComponent(msg)}`);
+      // server saves user message synchronously before returning — refresh now to show it immediately
+      await refresh();
     } catch (_) {}
     setTimeout(() => setSending(false), 15000);
   };
