@@ -660,7 +660,7 @@ function FeedbackPage() {
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, padding: "12px 16px", marginBottom: 14 }}>
           <div style={{ ...F, fontSize: 10, color: C.muted }}>
             Next recap in <span style={{ color: C.text }}>6 days</span>
-            <span style={{ color: C.faint, marginLeft: 16 }}>// 0 listings tracked</span>
+            <span style={{ color: C.faint, marginLeft: 16 }}>{`// 0 listings tracked`}</span>
           </div>
         </div>
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6,
