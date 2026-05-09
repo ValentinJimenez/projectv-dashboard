@@ -108,7 +108,7 @@ const Terminal = ({ line1, line2, color }) => (
 
 // ── Main Dashboard ────────────────────────────────────────
 export default function Dashboard() {
-  const { proposals, decide } = useProposals();
+  const { proposals, decide, clearCompleted } = useProposals();
   const { designs, decideDesign } = useDesigns();
   const { listings } = useReadyListings();
   const { report } = useSnowReport();
@@ -151,6 +151,9 @@ export default function Dashboard() {
             style={{ background: p.card, border: `1px solid ${p.border}`, borderRadius: 8, padding: "8px 13px", color: p.text, fontSize: 11, width: 260, outline: "none", fontFamily: "monospace" }} />
           <button onClick={launch} style={{ background: launching ? p.greenDim : p.accentDim, color: launching ? p.green : p.accent, border: `1px solid ${launching ? p.green : p.accent}44`, borderRadius: 8, padding: "8px 18px", fontSize: 11, fontWeight: 700, cursor: "pointer", transition: "all 0.3s", letterSpacing: 0.5 }}>
             {launching ? "✓ Launched!" : "❄️ Launch Pipeline"}
+          </button>
+          <button onClick={clearCompleted} style={{ background: "#2a1010", color: "#f87171", border: "1px solid #4a2020", borderRadius: 8, padding: "8px 14px", fontSize: 11, fontWeight: 700, cursor: "pointer", letterSpacing: 0.5 }}>
+            Clear
           </button>
           {isRunning && (
             <div style={{ fontSize: 10, color: p.amber, fontFamily: "monospace", display: "flex", alignItems: "center", gap: 5 }}>

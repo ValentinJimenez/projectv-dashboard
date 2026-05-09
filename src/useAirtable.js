@@ -24,7 +24,7 @@ export function useProposals() {
 
   const fetch_ = async () => {
     const data = await airtableFetch(
-      `https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}?filterByFormula=OR({status}="pending",{status}="approved",{status}="rejected")`
+      `https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}?filterByFormula=OR({status}="pending",{status}="approved")`
     );
     setProposals((data.records || []).map(r => ({
       id: r.id,
@@ -39,8 +39,26 @@ export function useProposals() {
     fetch_();
   };
 
+  const clearCompleted = async () => {
+    const formula = encodeURIComponent('OR({status}="ready_to_upload",{status}="design_rejected",{status}="rejected",{status}="designed")');
+    const data = await airtableFetch(
+      `https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}?filterByFormula=${formula}`
+    );
+    const ids = (data.records || []).map(r => r.id);
+    if (ids.length === 0) return;
+    for (let i = 0; i < ids.length; i += 10) {
+      const chunk = ids.slice(i, i + 10);
+      const params = chunk.map(id => `records[]=${id}`).join("&");
+      await fetch(`https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}?${params}`, {
+        method: "DELETE",
+        headers,
+      });
+    }
+    fetch_();
+  };
+
   useEffect(() => { fetch_(); const t = setInterval(fetch_, 30000); return () => clearInterval(t); }, []);
-  return { proposals, decide };
+  return { proposals, decide, clearCompleted };
 }
 
 export function useDesigns() {
