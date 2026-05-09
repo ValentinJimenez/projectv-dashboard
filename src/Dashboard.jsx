@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import {
   useProposals, useDesigns, useReadyListings,
-  useSnowReport, usePipelineStatus, usePipelineLogs, useSnowMemory
+  useSnowReport, usePipelineStatus, usePipelineLogs, useSnowMemory, useSnowChat
 } from "./useAirtable";
 
 // ─── Design tokens ────────────────────────────────────────
@@ -451,24 +451,10 @@ const fmtTime = (ts) => {
 };
 
 function SnowChat() {
-  const [input, setInput]   = useState("");
-  const [messages, setMessages] = useState([]);
-  const [sending, setSending]   = useState(false);
+  const [input, setInput] = useState("");
+  const [sending, setSending] = useState(false);
+  const { messages } = useSnowChat();
   const scrollRef = useRef(null);
-
-  // Poll /messages every 3 seconds
-  useEffect(() => {
-    const poll = async () => {
-      try {
-        const res  = await fetch("http://localhost:8000/messages");
-        const data = await res.json();
-        setMessages(data.messages || []);
-      } catch (_) {}
-    };
-    poll();
-    const t = setInterval(poll, 3000);
-    return () => clearInterval(t);
-  }, []);
 
   // Auto-scroll to bottom on new messages or thinking state
   useEffect(() => {

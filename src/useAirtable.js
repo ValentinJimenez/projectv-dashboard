@@ -6,6 +6,7 @@ const API_KEY = process.env.REACT_APP_AIRTABLE_API_KEY;
 const SNOW_TABLE = process.env.REACT_APP_SNOW_TABLE_ID;
 const MEMORY_TABLE = process.env.REACT_APP_SNOW_MEMORY_TABLE_ID;
 const LOGS_TABLE = process.env.REACT_APP_PIPELINE_LOGS_TABLE_ID;
+const CHAT_TABLE = process.env.REACT_APP_CHAT_TABLE_ID;
 
 const headers = { Authorization: `Bearer ${API_KEY}` };
 
@@ -224,4 +225,31 @@ export function useSnowMemory() {
   }, []);
 
   return { memory };
+}
+
+export function useSnowChat() {
+  const [messages, setMessages] = useState([]);
+
+  const fetch_ = async () => {
+    try {
+      if (!CHAT_TABLE) return;
+      const data = await airtableFetch(
+        `https://api.airtable.com/v0/${BASE_ID}/${CHAT_TABLE}?sort[0][field]=timestamp&sort[0][direction]=asc&maxRecords=20`
+      );
+      setMessages((data.records || []).map(r => ({
+        id: r.id,
+        role: r.fields.role,
+        text: r.fields.text,
+        timestamp: r.fields.timestamp,
+      })));
+    } catch (e) {}
+  };
+
+  useEffect(() => {
+    fetch_();
+    const t = setInterval(fetch_, 3000);
+    return () => clearInterval(t);
+  }, []);
+
+  return { messages };
 }
