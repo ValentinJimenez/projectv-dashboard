@@ -1359,6 +1359,10 @@ export default function Dashboard() {
   const runStep3 = () => callEndpoint(`${API}/step3`);
   const stopPipeline  = async () => { try { await fetch(`${API}/stop`,  { method: "POST" }); } catch (_) {} };
   const resetPipeline = async () => { try { await fetch(`${API}/reset`, { method: "POST" }); } catch (_) {} };
+  const fullReset = async () => {
+    if (!window.confirm("Delete ALL Airtable records and reset the pipeline?")) return;
+    try { await fetch(`${API}/reset/airtable`, { method: "POST" }); } catch (_) {}
+  };
 
   if (!unlocked) return <LockScreen onUnlock={() => setUnlocked(true)} />;
 
@@ -1402,6 +1406,7 @@ export default function Dashboard() {
             <GreenBtn onClick={launch} style={{ fontSize: 11, letterSpacing: 1 }}>[ GO WORK ]</GreenBtn>
           )}
           <GhostBtn onClick={resetPipeline} style={{ fontSize: 11, letterSpacing: 1 }}>[ RESET ]</GhostBtn>
+          <RedBtn onClick={fullReset} style={{ fontSize: 11, letterSpacing: 1 }}>[ FULL RESET ]</RedBtn>
           {isRunning && (
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <StatusDot state="running" />
