@@ -4,7 +4,7 @@
       "Bash(dir C:\\\\Users\\\\Vaale\\\\Documents *)",
       "Bash(git add *)",
       "Bash(git commit *)",
-      "Bash(npx react-scripts *)"
+      "Bash(git push *)"
     ]
   }
 }
