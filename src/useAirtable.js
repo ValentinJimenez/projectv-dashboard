@@ -232,15 +232,13 @@ export function useSnowChat() {
 
   const fetch_ = async () => {
     try {
-      if (!CHAT_TABLE) return;
-      const data = await airtableFetch(
-        `https://api.airtable.com/v0/${BASE_ID}/${CHAT_TABLE}?sort[0][field]=timestamp&sort[0][direction]=asc&maxRecords=20`
-      );
-      setMessages((data.records || []).map(r => ({
-        id: r.id,
-        role: r.fields.role,
-        text: r.fields.text,
-        timestamp: r.fields.timestamp,
+      const res  = await fetch("http://localhost:8000/conversations?last_n=50");
+      const data = await res.json();
+      setMessages((data.conversations || []).map(c => ({
+        id:        c.id,
+        role:      c.role,
+        text:      c.message,
+        timestamp: c.timestamp,
       })));
     } catch (e) {}
   };
