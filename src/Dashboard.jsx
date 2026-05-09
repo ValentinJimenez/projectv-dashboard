@@ -754,6 +754,7 @@ function ReviewPage({ packages, reviewPackage, activeAgent, runStep2 }) {
   return (
     <div style={{ padding: "20px 22px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+        <ReviewCat color={C.amber} size={32} />
         <span style={{ ...F, fontSize: 16, fontWeight: 700, color: C.amber, letterSpacing: 2 }}>REVIEW</span>
         <span style={{ ...F, fontSize: 9, color: C.muted }}>LEON × RIKO</span>
         {isActive && <Badge text="GENERATING" color={C.accent} />}
