@@ -648,9 +648,9 @@ function OverviewPage({ setActive, pipelineStatus, pendingPackages, listings, al
             <RedBtn onClick={stopPipeline} style={{ width: "100%", padding: "9px 0", fontSize: 11, letterSpacing: 1, animation: "pulse 1.4s ease-in-out infinite" }}>[ STOP PIPELINE ]</RedBtn>
           ) : launching ? (
             <GhostBtn disabled style={{ width: "100%", padding: "9px 0", fontSize: 11 }}>LAUNCHING...</GhostBtn>
-          ) : pipelineStep === "waiting_review" && packages.length > 0 ? (
+          ) : pipelineStep === "waiting_review" && pendingPackages.length > 0 ? (
             <AmberBtn onClick={() => setActive("review")} style={{ width: "100%", padding: "9px 0", fontSize: 11, letterSpacing: 1 }}>[ APPROVE PACKAGES ]</AmberBtn>
-          ) : pipelineStep === "waiting_strategy" || (pipelineStep === "waiting_review" && packages.length === 0) ? (
+          ) : pipelineStep === "waiting_strategy" || (pipelineStep === "waiting_review" && pendingPackages.length === 0) ? (
             <GreenBtn onClick={lr2} style={{ width: "100%", padding: "9px 0", fontSize: 11, letterSpacing: 1 }}>[ RUN STRATEGY ]</GreenBtn>
           ) : pipelineStep === "waiting_listing" ? (
             <CyanBtn onClick={lr3} style={{ width: "100%", padding: "9px 0", fontSize: 11, letterSpacing: 1 }}>[ RUN SNOOPY ]</CyanBtn>
