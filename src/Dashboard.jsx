@@ -623,7 +623,7 @@ function ListingPage({ listings, activeAgent, onSelect, refresh }) {
                         {l.tags?.split(",").length || 0} tags
                       </div>
                       <GreenBtn onClick={e => e.stopPropagation()} style={{ width: "100%", padding: "6px 0", fontSize: 10, letterSpacing: 1 }}>
-                        [ UPLOAD TO ETSY ]
+                        [ POST TO ETSY ]
                       </GreenBtn>
                     </div>
                   </div>
@@ -800,7 +800,7 @@ function ListingModal({ listing, onClose }) {
           </div>
           <div style={{ ...F, fontSize: 9, color: C.muted, letterSpacing: 1, marginBottom: 4 }}>TAGS</div>
           <div style={{ ...F, fontSize: 9, color: "#334433", lineHeight: 2, marginBottom: 16 }}>{listing.tags}</div>
-          <GreenBtn style={{ width: "100%", padding: "9px 0", fontSize: 11, marginBottom: 6, letterSpacing: 1 }}>[ UPLOAD TO ETSY ]</GreenBtn>
+          <GreenBtn style={{ width: "100%", padding: "9px 0", fontSize: 11, marginBottom: 6, letterSpacing: 1 }}>[ POST TO ETSY ]</GreenBtn>
           <GhostBtn onClick={onClose} style={{ width: "100%", padding: "8px 0", fontSize: 11, letterSpacing: 1 }}>[ CLOSE ]</GhostBtn>
         </div>
       </div>
@@ -832,12 +832,13 @@ export default function Dashboard() {
 
   const [activePage, setActivePage] = useState("overview");
   const [keywords, setKeywords] = useState("");
-  const [launchState, setLaunchState] = useState("idle");
+  const [launching, setLaunching] = useState(false);
   const [selectedDesign, setSelectedDesign] = useState(null);
   const [selectedListing, setSelectedListing] = useState(null);
 
   const activeAgent = pipelineStatus?.active_agent;
   const isRunning = pipelineStatus?.running;
+  const pipelineStep = pipelineStatus?.status;
 
   const agentNameToPage = { "Research Agent": "research", "Design Agent": "design", "Listing Agent": "listing", "Feedback Agent": "feedback" };
   const agentStates = Object.fromEntries(
@@ -855,14 +856,15 @@ export default function Dashboard() {
     listing:  listings.length,
   };
 
-  const launch = async () => {
-    setLaunchState("launching");
-    try {
-      await fetch(`http://localhost:8000/launch?keywords=${encodeURIComponent(keywords)}`, { method: "POST" });
-    } catch (e) {}
-    setLaunchState("done");
-    setTimeout(() => setLaunchState("idle"), 3500);
+  const callEndpoint = async (url) => {
+    setLaunching(true);
+    try { await fetch(url, { method: "POST" }); } catch (e) {}
+    setTimeout(() => setLaunching(false), 2000);
   };
+
+  const launch   = () => callEndpoint(`http://localhost:8000/launch?keywords=${encodeURIComponent(keywords)}`);
+  const runStep2 = () => callEndpoint("http://localhost:8000/step2");
+  const runStep3 = () => callEndpoint("http://localhost:8000/step3");
 
   const noop = () => {};
 
@@ -881,7 +883,7 @@ export default function Dashboard() {
           </span>
           <div style={{ width: 1, height: 18, background: C.border }} />
           <input value={keywords} onChange={e => setKeywords(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && !isRunning && launchState === "idle" && launch()}
+            onKeyDown={e => e.key === "Enter" && !isRunning && !launching && launch()}
             placeholder="keywords for snow..."
             style={{ ...F, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4,
               padding: "5px 10px", color: C.text, fontSize: 10, width: 200, outline: "none",
@@ -890,13 +892,33 @@ export default function Dashboard() {
             onBlur={e => e.target.style.borderColor = C.border}
           />
           {isRunning ? (
-            <GhostBtn style={{ ...F, fontSize: 11, letterSpacing: 1, animation: "pulse 1.4s ease-in-out infinite",
-              borderColor: C.active + "44", color: C.muted }}>
+            <GhostBtn disabled style={{ fontSize: 11, letterSpacing: 1,
+              animation: "pulse 1.4s ease-in-out infinite", borderColor: C.active + "44", color: C.muted }}>
               [ GO NAP ]
             </GhostBtn>
+          ) : launching ? (
+            <GhostBtn disabled style={{ fontSize: 11, letterSpacing: 1, color: C.muted }}>LAUNCHING...</GhostBtn>
+          ) : pipelineStep === "waiting_approval" ? (
+            <button onClick={runStep2} style={{ ...F, fontSize: 11, letterSpacing: 1, cursor: "pointer",
+              background: "transparent", color: C.amber, border: `1px solid ${C.amber}88`,
+              borderRadius: 4, padding: "5px 14px",
+              boxShadow: "0 0 8px rgba(255,187,68,0.25)" }}
+              onMouseEnter={e => e.currentTarget.style.boxShadow = "0 0 14px rgba(255,187,68,0.45)"}
+              onMouseLeave={e => e.currentTarget.style.boxShadow = "0 0 8px rgba(255,187,68,0.25)"}>
+              [ RUN DESIGN ]
+            </button>
+          ) : pipelineStep === "waiting_review" ? (
+            <button onClick={runStep3} style={{ ...F, fontSize: 11, letterSpacing: 1, cursor: "pointer",
+              background: "transparent", color: C.cyan, border: `1px solid ${C.cyan}88`,
+              borderRadius: 4, padding: "5px 14px",
+              boxShadow: "0 0 8px rgba(68,221,255,0.25)" }}
+              onMouseEnter={e => e.currentTarget.style.boxShadow = "0 0 14px rgba(68,221,255,0.45)"}
+              onMouseLeave={e => e.currentTarget.style.boxShadow = "0 0 8px rgba(68,221,255,0.25)"}>
+              [ RUN LISTING ]
+            </button>
           ) : (
-            <GreenBtn onClick={launch} disabled={launchState !== "idle"} style={{ fontSize: 11, letterSpacing: 1 }}>
-              {launchState === "launching" ? "LAUNCHING..." : launchState === "done" ? "LAUNCHED" : "[ GO WORK ]"}
+            <GreenBtn onClick={launch} style={{ fontSize: 11, letterSpacing: 1 }}>
+              [ GO WORK ]
             </GreenBtn>
           )}
           {isRunning && (
@@ -913,6 +935,35 @@ export default function Dashboard() {
             </div>
           ))}
         </div>
+
+        {/* Status banner */}
+        {!isRunning && pipelineStep === "waiting_approval" && (
+          <div style={{ padding: "7px 20px", background: "#1a1200", borderBottom: `1px solid ${C.amber}44`,
+            display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+            <StatusDot state="waiting" />
+            <span style={{ ...F, fontSize: 10, color: C.amber, letterSpacing: 1.5 }}>
+              WAITING — {proposals.filter(p => p.status === "pending").length} PROPOSAL{proposals.filter(p => p.status === "pending").length !== 1 ? "S" : ""} NEED YOUR APPROVAL
+            </span>
+          </div>
+        )}
+        {!isRunning && pipelineStep === "waiting_review" && (
+          <div style={{ padding: "7px 20px", background: "#001a1f", borderBottom: `1px solid ${C.cyan}44`,
+            display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+            <StatusDot state="running" />
+            <span style={{ ...F, fontSize: 10, color: C.cyan, letterSpacing: 1.5 }}>
+              WAITING — {designs.length} DESIGN{designs.length !== 1 ? "S" : ""} NEED YOUR REVIEW
+            </span>
+          </div>
+        )}
+        {!isRunning && pipelineStep === "complete" && (
+          <div style={{ padding: "7px 20px", background: "#001a0d", borderBottom: `1px solid ${C.active}44`,
+            display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+            <StatusDot state="running" />
+            <span style={{ ...F, fontSize: 10, color: C.active, letterSpacing: 1.5 }}>
+              STEP 3 COMPLETE — CHECK LISTINGS
+            </span>
+          </div>
+        )}
 
         {/* Page content */}
         <div style={{ flex: 1, overflowY: "auto" }}>
